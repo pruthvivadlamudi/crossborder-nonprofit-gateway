@@ -6,17 +6,19 @@
   <title>Trustee Administrative Workspace | Live Analytics & FCRA Audit</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Playfair+Display:ital,wght@0,600;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <!-- Chart.js for High-Fidelity Interactive Analytics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --primary: #0070ba;
-      --primary-hover: #005ea6;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --gold-primary: #d97706;
+      --gold-border: rgba(245, 158, 11, 0.22);
       --secondary: #003087;
       --accent: #38bdf8;
       --bg: #070b12;
-      --card-bg: rgba(15, 23, 42, 0.82);
+      --card-bg: rgba(15, 23, 42, 0.86);
       --card-border: rgba(255, 255, 255, 0.08);
       --card-hover: rgba(30, 41, 59, 0.95);
       --text: #f1f5f9;
@@ -25,17 +27,35 @@
       --warning: #f59e0b;
       --danger: #ef4444;
       --font: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-title: 'Cinzel', serif;
+      --font-serif: 'Playfair Display', serif;
       --mono: 'JetBrains Mono', monospace;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--font);
-      background: radial-gradient(circle at top right, #13233f, #070b12 85%);
+      background: var(--bg) url('/assets/traditional_bg.jpg') no-repeat center center fixed;
+      background-size: cover;
       color: var(--text);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
+      position: relative;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at top right, rgba(17, 28, 48, 0.88), rgba(7, 11, 18, 0.96) 80%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .top-header, .main-content, #login-modal {
+      position: relative;
+      z-index: 1;
     }
 
     /* Top Workspace Header */
@@ -231,8 +251,9 @@
 
     .kpi-card {
       background: var(--card-bg);
-      backdrop-filter: blur(14px);
-      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--gold-border);
       border-radius: 16px;
       padding: 18px 20px;
       position: relative;
@@ -242,7 +263,7 @@
 
     .kpi-card:hover {
       transform: translateY(-2px);
-      border-color: rgba(255, 255, 255, 0.18);
+      border-color: rgba(245, 158, 11, 0.4);
     }
 
     .kpi-title {
@@ -285,8 +306,9 @@
 
     .chart-card {
       background: var(--card-bg);
-      backdrop-filter: blur(14px);
-      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--gold-border);
       border-radius: 16px;
       padding: 20px 22px;
       display: flex;
@@ -315,8 +337,9 @@
     /* Ledger Table Section */
     .ledger-section {
       background: var(--card-bg);
-      backdrop-filter: blur(14px);
-      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--gold-border);
       border-radius: 16px;
       padding: 22px;
     }
@@ -587,6 +610,7 @@
   <div class="brand-section">
     <div class="brand-logo">₹</div>
     <div class="brand-title">
+      <div style="font-size: 0.72rem; color: #fbbf24; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 2px;">॥ सेवा परमो धर्मः ॥ • SACRED STEWARDSHIP SUITE</div>
       <h1>Trustee Compliance & Administration Workspace</h1>
       <p>Managing Trustee: <strong>Authorized Managing Trustee</strong> | FCRA & MHA Form FC-4 Hub</p>
     </div>

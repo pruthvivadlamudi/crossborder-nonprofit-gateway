@@ -6,57 +6,294 @@
   <title>International Support Fund | Non-Profit Giving</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --primary: #0070ba;
-      --primary-hover: #005ea6;
-      --secondary: #003087;
-      --bg: #090e17;
-      --card-bg: rgba(18, 26, 43, 0.85);
+      --gold-primary: #d97706;
+      --gold-glow: #f59e0b;
+      --gold-light: #fef3c7;
+      --gold-border: rgba(245, 158, 11, 0.28);
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --secondary: #0f172a;
+      --bg: #080c14;
+      --card-bg: rgba(15, 23, 42, 0.88);
+      --card-inner: rgba(30, 41, 59, 0.65);
       --border: rgba(255, 255, 255, 0.1);
-      --text: #f0f4f8;
+      --text: #f8fafc;
       --text-muted: #94a3b8;
       --success: #10b981;
       --warning: #f59e0b;
-      --font: 'Plus Jakarta Sans', sans-serif;
+      --font-body: 'Plus Jakarta Sans', sans-serif;
+      --font-title: 'Cinzel', serif;
+      --font-serif: 'Playfair Display', serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    
     body {
-      font-family: var(--font);
-      background: radial-gradient(circle at top right, #172554, #090e17 80%);
+      font-family: var(--font-body);
+      background: var(--bg) url('/assets/traditional_bg.jpg') no-repeat center center fixed;
+      background-size: cover;
       color: var(--text);
       min-height: 100vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      padding: 24px;
+      padding: 32px 16px;
+      position: relative;
     }
 
-    .container {
+    /* Ambient Traditional Backdrop Overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle at 50% 20%, rgba(13, 20, 36, 0.78), rgba(8, 12, 20, 0.94) 85%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .portal-wrapper {
+      position: relative;
+      z-index: 1;
       width: 100%;
-      max-width: 720px;
+      max-width: 1220px;
+      display: grid;
+      grid-template-columns: 1.15fr 0.95fr;
+      gap: 32px;
+      align-items: start;
+    }
+
+    @media (max-width: 1024px) {
+      .portal-wrapper {
+        grid-template-columns: 1fr;
+        max-width: 680px;
+      }
+    }
+
+    /* Left Column: Mission, Impact Seva & Fund Utilization */
+    .info-column {
       background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--gold-border);
       border-radius: 24px;
       padding: 36px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 30px rgba(245, 158, 11, 0.08);
     }
 
+    /* Right Column: Donation Action Card */
+    .donation-column {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--gold-border);
+      border-radius: 24px;
+      padding: 36px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 30px rgba(2, 132, 199, 0.08);
+    }
+
+    /* Sacred Invocation Badge */
+    .sacred-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid var(--gold-border);
+      color: #fbbf24;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-bottom: 16px;
+    }
+
+    .traditional-heading {
+      font-family: var(--font-title);
+      font-size: 2.15rem;
+      font-weight: 700;
+      line-height: 1.25;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #ffffff 30%, #fef3c7 70%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.01em;
+    }
+
+    .traditional-subtitle {
+      font-family: var(--font-serif);
+      font-size: 1.05rem;
+      font-style: italic;
+      color: #fde68a;
+      margin-bottom: 14px;
+      line-height: 1.4;
+    }
+
+    .traditional-mission {
+      font-size: 0.92rem;
+      line-height: 1.65;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      border-left: 3px solid var(--gold-glow);
+      padding-left: 14px;
+      background: rgba(245, 158, 11, 0.04);
+      padding-top: 6px;
+      padding-bottom: 6px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    /* Section Subheaders */
+    .section-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #f8fafc;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-icon { font-size: 1.15rem; }
+
+    /* Seva Pillars Grid */
+    .seva-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    @media (max-width: 640px) {
+      .seva-grid { grid-template-columns: 1fr; }
+    }
+
+    .seva-card {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      transition: all 0.25s ease;
+    }
+
+    .seva-card:hover {
+      border-color: var(--gold-border);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .seva-icon {
+      font-size: 1.55rem;
+      line-height: 1;
+      padding-top: 2px;
+      flex-shrink: 0;
+    }
+
+    .seva-body h4 {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+
+    .seva-body p {
+      font-size: 0.77rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    /* Fund Utilization Section */
+    .utilization-box {
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 24px;
+    }
+
+    .utilization-bar {
+      height: 12px;
+      width: 100%;
+      border-radius: 9999px;
+      overflow: hidden;
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      margin-bottom: 14px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.5);
+    }
+
+    .progress-segment {
+      height: 100%;
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .utilization-legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    @media (max-width: 640px) {
+      .utilization-legend { grid-template-columns: 1fr; }
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.77rem;
+    }
+
+    .legend-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .legend-label {
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .legend-percent {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    /* Statutory Guarantee Banner */
+    .statutory-banner {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.8rem;
+      color: #a7f3d0;
+      line-height: 1.45;
+    }
+
+    /* Trust Tabs in Donation Card */
     .trust-selector {
       display: flex;
       background: rgba(15, 23, 42, 0.8);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 4px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
 
     .trust-tab {
       flex: 1;
-      padding: 10px 14px;
+      padding: 11px 14px;
       border: none;
       background: transparent;
       color: var(--text-muted);
@@ -64,15 +301,15 @@
       font-size: 0.88rem;
       border-radius: 8px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.25s ease;
       font-family: inherit;
       text-align: center;
     }
 
     .trust-tab.active {
-      background: var(--primary);
+      background: linear-gradient(135deg, #d97706, #b45309);
       color: #ffffff;
-      box-shadow: 0 4px 12px rgba(0, 112, 186, 0.3);
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
     }
 
     .top-actions {
@@ -90,17 +327,14 @@
       color: var(--success);
       padding: 6px 12px;
       border-radius: 9999px;
-      font-size: 0.8rem;
-      font-weight: 600;
+      font-size: 0.76rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border: 1px solid rgba(16, 185, 129, 0.3);
     }
 
-    .header-links {
-      display: flex;
-      gap: 10px;
-    }
+    .header-links { display: flex; gap: 10px; }
 
     .action-btn {
       display: inline-flex;
@@ -118,20 +352,20 @@
       transition: all 0.2s;
     }
 
-    .action-btn:hover { background: var(--primary); border-color: var(--primary); color: white; }
-
-    .header { margin-bottom: 20px; }
-    h1 { font-size: 1.85rem; font-weight: 700; margin-bottom: 6px; }
-    p.subtitle { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; }
+    .action-btn:hover {
+      background: var(--gold-primary);
+      border-color: var(--gold-primary);
+      color: white;
+    }
 
     .bank-badge {
       background: rgba(15, 23, 42, 0.6);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 10px 14px;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       color: #93c5fd;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -140,112 +374,120 @@
     }
 
     .compliance-notice {
-      background: rgba(245, 158, 11, 0.1);
-      border: 1px solid rgba(245, 158, 11, 0.25);
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.22);
       border-radius: 10px;
-      padding: 12px 16px;
-      margin-bottom: 24px;
-      font-size: 0.82rem;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+      font-size: 0.78rem;
       color: #fde68a;
       line-height: 1.4;
     }
 
+    /* Form Fields */
     .form-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 24px;
+      gap: 14px;
+      margin-bottom: 20px;
     }
 
     .form-group.full-width { grid-column: span 2; }
+    
     label {
       display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
+      font-size: 0.76rem;
+      font-weight: 700;
       color: var(--text-muted);
-      margin-bottom: 6px;
+      margin-bottom: 5px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
     input, select, textarea {
       width: 100%;
-      background: rgba(15, 23, 42, 0.8);
+      background: rgba(15, 23, 42, 0.85);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 12px 14px;
+      padding: 11px 13px;
       color: var(--text);
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       outline: none;
       transition: all 0.2s ease;
     }
 
     input:focus, select:focus, textarea:focus {
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(0, 112, 186, 0.25);
+      border-color: var(--gold-glow);
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
     }
 
-    textarea { resize: vertical; min-height: 60px; }
+    textarea { resize: vertical; min-height: 55px; }
 
     .amount-group { display: flex; gap: 8px; margin-top: 6px; }
+    
     .amount-btn {
       flex: 1;
-      padding: 10px;
+      padding: 10px 6px;
       background: rgba(255, 255, 255, 0.05);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       transition: all 0.2s;
     }
-    .amount-btn.active, .amount-btn:hover { background: var(--primary); border-color: var(--primary); }
+    
+    .amount-btn.active, .amount-btn:hover {
+      background: var(--gold-primary);
+      border-color: var(--gold-primary);
+      color: white;
+    }
 
     .nri-checkbox {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-top: 6px;
-      font-size: 0.85rem;
+      margin-top: 4px;
+      font-size: 0.82rem;
       color: var(--text-muted);
       cursor: pointer;
     }
-    .nri-checkbox input { width: 18px; height: 18px; cursor: pointer; }
+    
+    .nri-checkbox input { width: 17px; height: 17px; cursor: pointer; }
 
     .validation-warning {
       color: var(--warning);
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       text-align: center;
-      padding: 14px;
-      background: rgba(245, 158, 11, 0.05);
+      padding: 12px;
+      background: rgba(245, 158, 11, 0.06);
       border-radius: 8px;
       border: 1px dashed rgba(245, 158, 11, 0.3);
     }
 
     .btn-submit-donation {
       width: 100%;
-      padding: 16px;
-      background: #0070ba;
+      padding: 14px;
+      background: linear-gradient(135deg, #d97706, #b45309);
       color: white;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 700;
       border: none;
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.2s;
       font-family: inherit;
-      box-shadow: 0 4px 15px rgba(0, 112, 186, 0.4);
+      box-shadow: 0 4px 15px rgba(217, 119, 6, 0.4);
     }
-    .btn-submit-donation:hover { background: #005ea6; }
 
     .footer {
-      margin-top: 24px;
+      margin-top: 20px;
       text-align: center;
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       color: var(--text-muted);
       border-top: 1px solid var(--border);
-      padding-top: 16px;
+      padding-top: 14px;
       line-height: 1.6;
     }
 
@@ -254,144 +496,193 @@
       display: none;
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.75);
-      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 1000;
       justify-content: center;
       align-items: center;
+      padding: 16px;
     }
+
     .modal-card {
-      background: #111827;
-      border: 1px solid var(--border);
+      background: #0f172a;
+      border: 1px solid var(--gold-border);
       border-radius: 20px;
-      padding: 32px;
-      max-width: 400px;
-      width: 90%;
+      padding: 30px;
+      max-width: 440px;
+      width: 100%;
       text-align: center;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.7);
     }
-    .qr-box { background: white; padding: 16px; border-radius: 12px; display: inline-block; margin: 16px 0; }
-    .qr-box img { width: 200px; height: 200px; display: block; }
   </style>
 </head>
 <body>
 
-<div class="container">
-  <!-- Multi-Trust Toggle -->
-  <div class="trust-selector">
-    <button class="trust-tab active" id="tab-divya" onclick="switchTrust('divya')">
-      Global Charitable Trust
-    </button>
-    <button class="trust-tab" id="tab-relaxation" onclick="switchTrust('relaxation')">
-      Mindful Living Project
-    </button>
+<div class="portal-wrapper">
+  
+  <!-- Left Column: Sacred Mission, Seva Pillars & Fund Utilization -->
+  <div class="info-column">
+    <div class="sacred-badge">
+      <span>🪷</span>
+      <span>॥ वसुधैव कुटुम्बकम् ॥ • Regulated Non-Profit Gateway</span>
+    </div>
+
+    <h1 id="ngo-name" class="traditional-heading">Global Charitable Foundation</h1>
+    <div id="ngo-subtitle" class="traditional-subtitle">Vedic Wellness, Yoga Sadhana, Annadanam & Rural Community Upliftment</div>
+    <p id="ngo-mission" class="traditional-mission">
+      Dedicated to reviving traditional yoga and holistic wellness, offering free wholesome nutrition (Annadanam), providing free rural healthcare seva, and fostering cultural preservation across communities.
+    </p>
+
+    <!-- Why We Need Your Support: Seva Pillars -->
+    <div class="section-title">
+      <span class="title-icon">🪔</span>
+      <span>Sacred Seva Initiatives</span>
+    </div>
+
+    <div id="seva-pillars-container" class="seva-grid">
+      <!-- Dynamic Pillars Injected via JavaScript -->
+    </div>
+
+    <!-- 100% Transparent Fund Utilization -->
+    <div class="section-title">
+      <span class="title-icon">⚖️</span>
+      <span>100% Transparent Fund Allocation</span>
+    </div>
+
+    <div class="utilization-box">
+      <div id="fund-utilization-bar" class="utilization-bar">
+        <!-- Dynamic Segments Injected via JavaScript -->
+      </div>
+      <div id="fund-utilization-legend" class="utilization-legend">
+        <!-- Dynamic Legend Injected via JavaScript -->
+      </div>
+    </div>
+
+    <!-- Statutory Guarantee -->
+    <div class="statutory-banner">
+      <div style="font-size: 1.3rem;">🛡️</div>
+      <div>
+        <strong>Official Remittance Assurance:</strong> 100% of foreign contributions are deposited directly into the institution's designated national bank account under RBI Purpose Code P1301. Every transaction receives an audited tax receipt with zero intermediary deductions.
+      </div>
+    </div>
   </div>
 
-  <div class="top-actions">
-    <div class="badge">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-      Official Trust Gateway
-    </div>
-    <div class="header-links">
-      <button type="button" class="action-btn" id="btn-share-modal" onclick="openShareModal()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-        Share & QR Code
+  <!-- Right Column: Donation Action Card -->
+  <div class="donation-column">
+    <!-- Multi-Trust Toggle -->
+    <div class="trust-selector">
+      <button class="trust-tab active" id="tab-divya" onclick="switchTrust('divya')">
+        Global Charitable Trust
+      </button>
+      <button class="trust-tab" id="tab-relaxation" onclick="switchTrust('relaxation')">
+        Mindful Living Project
       </button>
     </div>
-  </div>
 
-  <div class="header">
-    <h1 id="ngo-name">Global Charitable Foundation</h1>
-    <p class="subtitle" id="ngo-tagline">Supporting rural health, community wellness, and social empowerment initiatives.</p>
-  </div>
+    <div class="top-actions">
+      <div class="badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        Official Trust Gateway
+      </div>
+      <div class="header-links">
+        <button type="button" class="action-btn" id="btn-share-modal" onclick="openShareModal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          Share & QR Code
+        </button>
+      </div>
+    </div>
 
-  <div class="bank-badge" id="bank-badge">
-    <span>Settlement Bank: <strong id="bank-name">Designated National Bank</strong></span>
-    <span>Routing: <strong id="bank-ifsc">BANK0000001</strong> | <strong id="bank-account">A/c ending in ...XXXX</strong></span>
-  </div>
+    <div class="bank-badge" id="bank-badge">
+      <span>Settlement Bank: <strong id="bank-name">Designated National Bank</strong></span>
+      <span>Routing: <strong id="bank-ifsc">BANK0000001</strong> | <strong id="bank-account">A/c ending in ...XXXX</strong></span>
+    </div>
 
-  <div class="compliance-notice">
-    <strong>Mandatory Indian Law Notice (FCRA Rule 13):</strong> Anonymous foreign contributions are prohibited. Full legal identity is required to issue your official tax receipt.
-  </div>
+    <div class="compliance-notice">
+      <strong>Mandatory Indian Law Notice (FCRA Rule 13):</strong> Anonymous foreign contributions are strictly prohibited. Legal identity is required to issue your statutory receipt.
+    </div>
 
-  <form id="donation-form">
-    <div class="form-grid">
-      <div class="form-group">
-        <label for="firstName">First Name *</label>
-        <input type="text" id="firstName" required placeholder="John">
-      </div>
-      <div class="form-group">
-        <label for="lastName">Last Name *</label>
-        <input type="text" id="lastName" required placeholder="Doe">
-      </div>
-      <div class="form-group">
-        <label for="email">Email Address *</label>
-        <input type="email" id="email" required placeholder="john.doe@example.com">
-      </div>
-      <div class="form-group">
-        <label for="nationality">Nationality *</label>
-        <input type="text" id="nationality" required placeholder="United States">
-      </div>
-      <div class="form-group">
-        <label for="country">Country of Residence *</label>
-        <select id="country" required>
-          <option value="US">United States (US)</option>
-          <option value="GB">United Kingdom (GB)</option>
-          <option value="CA">Canada (CA)</option>
-          <option value="AU">Australia (AU)</option>
-          <option value="DE">Germany (DE)</option>
-          <option value="SG">Singapore (SG)</option>
-          <option value="AE">United Arab Emirates (AE)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="passportOrId">Passport / National ID</label>
-        <input type="text" id="passportOrId" placeholder="Optional for NRIs">
-      </div>
-
-      <div class="form-group full-width">
-        <label for="residentialAddress">Residential Street Address *</label>
-        <textarea id="residentialAddress" required placeholder="123 Maple Street, Suite 400, City, State, Postal Code"></textarea>
-      </div>
-
-      <div class="form-group full-width">
-        <label class="nri-checkbox">
-          <input type="checkbox" id="isNri">
-          <span>I am an Indian Passport Holder living abroad (Non-Resident Indian / NRI)</span>
-        </label>
-      </div>
-
-      <div class="form-group full-width">
-        <label>Donation Amount (USD) *</label>
-        <div class="amount-group">
-          <button type="button" class="amount-btn" onclick="selectAmount(25)">$25</button>
-          <button type="button" class="amount-btn active" onclick="selectAmount(50)">$50</button>
-          <button type="button" class="amount-btn" onclick="selectAmount(100)">$100</button>
-          <button type="button" class="amount-btn" onclick="selectAmount(250)">$250</button>
+    <form id="donation-form">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="firstName">First Name *</label>
+          <input type="text" id="firstName" required placeholder="John">
         </div>
-        <input type="number" id="customAmount" value="50" min="5" step="1" style="margin-top: 10px;" placeholder="Custom USD Amount" required>
+        <div class="form-group">
+          <label for="lastName">Last Name *</label>
+          <input type="text" id="lastName" required placeholder="Doe">
+        </div>
+        <div class="form-group">
+          <label for="email">Email Address *</label>
+          <input type="email" id="email" required placeholder="john.doe@example.com">
+        </div>
+        <div class="form-group">
+          <label for="nationality">Nationality *</label>
+          <input type="text" id="nationality" required placeholder="United States">
+        </div>
+        <div class="form-group">
+          <label for="country">Country of Residence *</label>
+          <select id="country" required>
+            <option value="US">United States (US)</option>
+            <option value="GB">United Kingdom (GB)</option>
+            <option value="CA">Canada (CA)</option>
+            <option value="AU">Australia (AU)</option>
+            <option value="DE">Germany (DE)</option>
+            <option value="SG">Singapore (SG)</option>
+            <option value="AE">United Arab Emirates (AE)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="passportOrId">Passport / National ID</label>
+          <input type="text" id="passportOrId" placeholder="Optional for NRIs">
+        </div>
+
+        <div class="form-group full-width">
+          <label for="residentialAddress">Residential Street Address *</label>
+          <textarea id="residentialAddress" required placeholder="123 Maple Street, Suite 400, City, State, Postal Code"></textarea>
+        </div>
+
+        <div class="form-group full-width">
+          <label class="nri-checkbox">
+            <input type="checkbox" id="isNri">
+            <span>I am an Indian Passport Holder living abroad (Non-Resident Indian / NRI)</span>
+          </label>
+        </div>
+
+        <div class="form-group full-width">
+          <label>Donation Amount (USD) *</label>
+          <div class="amount-group">
+            <button type="button" class="amount-btn" onclick="selectAmount(25)">$25</button>
+            <button type="button" class="amount-btn active" onclick="selectAmount(50)">$50</button>
+            <button type="button" class="amount-btn" onclick="selectAmount(100)">$100</button>
+            <button type="button" class="amount-btn" onclick="selectAmount(250)">$250</button>
+          </div>
+          <input type="number" id="customAmount" value="50" min="5" step="1" style="margin-top: 10px;" placeholder="Custom USD Amount" required>
+        </div>
+      </div>
+    </form>
+
+    <div id="validation-notice" class="validation-warning">
+      Please complete all required fields above to unlock secure PayPal payment options.
+    </div>
+
+    <div id="payment-area" style="display: none; margin-top: 18px;">
+      <div id="paypal-loading" style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 12px; display: none;">
+        Initializing secure PayPal gateway...
+      </div>
+      <div id="paypal-button-container"></div>
+      <div style="margin-top: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #94a3b8; font-size: 0.78rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>256-Bit SSL Encrypted | Direct Institutional Settlement</span>
       </div>
     </div>
-  </form>
 
-  <div id="validation-notice" class="validation-warning">
-    Please complete all required fields above to unlock secure PayPal payment options.
-  </div>
-
-  <div id="payment-area" style="display: none; margin-top: 20px;">
-    <div id="paypal-loading" style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 12px; display: none;">
-      Initializing secure PayPal gateway...
-    </div>
-    <div id="paypal-button-container"></div>
-    <div style="margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #94a3b8; font-size: 0.78rem;">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      <span>256-Bit SSL Encrypted | Direct Institutional Settlement</span>
+    <div class="footer">
+      Managing Trustee: <strong>Authorized Managing Trustee</strong><br>
+      Beneficiary Entity: <span id="footer-trust">Global Charitable Foundation</span> | RBI Purpose Code: <strong>P1109 / P1301</strong>
     </div>
   </div>
 
-  <div class="footer">
-    Managing Trustee: <strong>Authorized Managing Trustee</strong><br>
-    Beneficiary Entity: <span id="footer-trust">Global Charitable Foundation</span> | RBI Purpose Code: <strong>P1109 / P1301</strong>
-  </div>
 </div>
 
 <!-- Official Donor Tax Receipt Modal -->
@@ -429,7 +720,7 @@
     </div>
 
     <div style="display: flex; gap: 10px;">
-      <button class="action-btn" style="flex: 1; justify-content: center; padding: 10px; font-size: 0.88rem; background: var(--primary); color: white;" onclick="window.print()">
+      <button class="action-btn" style="flex: 1; justify-content: center; padding: 10px; font-size: 0.88rem; background: var(--gold-primary); color: white;" onclick="window.print()">
         🖨️ Print Tax Receipt
       </button>
       <button class="action-btn" style="flex: 1; justify-content: center; padding: 10px; font-size: 0.88rem;" onclick="closeReceiptModal()">
@@ -484,6 +775,48 @@
   let loadedClientId = null;
   let activeTrustConfig = null;
 
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function renderImpactPillars(pillars) {
+    const container = document.getElementById('seva-pillars-container');
+    if (!container || !pillars) return;
+    container.innerHTML = pillars.map(p => `
+      <div class="seva-card">
+        <div class="seva-icon">${p.icon}</div>
+        <div class="seva-body">
+          <h4>${escapeHtml(p.title)}</h4>
+          <p>${escapeHtml(p.description)}</p>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderFundUtilization(items) {
+    const bar = document.getElementById('fund-utilization-bar');
+    const legend = document.getElementById('fund-utilization-legend');
+    if (!bar || !legend || !items) return;
+    
+    bar.innerHTML = items.map(i => `
+      <div class="progress-segment" style="width: ${i.percent}%; background: ${i.color};" title="${escapeHtml(i.label)}: ${i.percent}%"></div>
+    `).join('');
+
+    legend.innerHTML = items.map(i => `
+      <div class="legend-item">
+        <span class="legend-dot" style="background: ${i.color};"></span>
+        <span class="legend-label">${escapeHtml(i.label)}</span>
+        <strong class="legend-percent">${i.percent}%</strong>
+      </div>
+    `).join('');
+  }
+
   async function loadTrustConfig(trustId) {
     try {
       const res = await fetch(`/api/config?trust=${trustId}`);
@@ -492,12 +825,26 @@
       isLiveConfigured = data.isLiveConfigured;
 
       document.getElementById('ngo-name').textContent = data.profile.name;
-      document.getElementById('ngo-tagline').textContent = data.profile.tagline;
+      if (document.getElementById('ngo-subtitle')) {
+        document.getElementById('ngo-subtitle').textContent = data.profile.subtitle || '';
+      }
+      if (document.getElementById('ngo-mission')) {
+        document.getElementById('ngo-mission').textContent = data.profile.mission || data.profile.tagline;
+      }
+      
       document.getElementById('bank-name').textContent = data.profile.bankName;
       document.getElementById('bank-ifsc').textContent = data.profile.ifsc;
       document.getElementById('bank-account').textContent = data.profile.accountMasked;
       document.getElementById('footer-trust').textContent = data.profile.name;
       
+      // Render Seva Pillars & Fund Utilization
+      if (data.profile.impactPillars) {
+        renderImpactPillars(data.profile.impactPillars);
+      }
+      if (data.profile.fundUtilization) {
+        renderFundUtilization(data.profile.fundUtilization);
+      }
+
       if (data.availableTrusts && data.availableTrusts.length) {
         const primaryProfile = data.availableTrusts.find(t => t.id === 'divya');
         const secondaryProfile = data.availableTrusts.find(t => t.id === 'relaxation');
@@ -526,7 +873,6 @@
     container.innerHTML = '';
     loadingElem.style.display = 'block';
 
-    // Remove previously loaded SDK script
     const existingScript = document.getElementById('paypal-sdk-script');
     if (existingScript) {
       existingScript.remove();
@@ -616,7 +962,6 @@
           }
 
           const capData = await res.json();
-          // Populate and show official receipt modal
           const isRelax = currentTrustId === 'relaxation';
           const trustName = activeTrustConfig?.profile?.name || (isRelax ? 'Mindful Living Initiative' : 'Global Charitable Foundation');
           const bankName = activeTrustConfig?.profile?.bankName
@@ -689,7 +1034,6 @@
 
   form.addEventListener('input', validateAndRender);
 
-  // QR Modal Logic with Dynamic Trust Branding
   function openShareModal() {
     const trustParam = currentTrustId ? `?trust=${currentTrustId}` : '';
     const currentUrl = `${window.location.origin}${window.location.pathname}${trustParam}`;
@@ -732,7 +1076,6 @@
   window.selectAmount = selectAmount;
   window.closeReceiptModal = closeReceiptModal;
 
-  // Direct Event Listeners for Reliable Browser Execution
   document.addEventListener('DOMContentLoaded', () => {
     const tabDivya = document.getElementById('tab-divya');
     const tabRelaxation = document.getElementById('tab-relaxation');
@@ -756,7 +1099,6 @@
     });
   });
 
-  // Auto-select trust if passed in URL query param (e.g. ?trust=relaxation)
   const urlParams = new URLSearchParams(window.location.search);
   const initialTrust = urlParams.get('trust') || 'divya';
   switchTrust(initialTrust);

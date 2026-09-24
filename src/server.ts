@@ -195,7 +195,9 @@ const TRUST_PROFILES: Record<string, any> = {
   divya: {
     id: 'divya',
     name: process.env.PRIMARY_TRUST_NAME || 'Global Charitable Foundation',
-    tagline: 'Supporting rural health, community wellness, and social empowerment initiatives.',
+    subtitle: 'Vedic Wellness, Yoga Sadhana, Annadanam & Rural Community Upliftment',
+    tagline: 'Empowering communities through holistic yoga, wholesome nutrition, and rural healthcare seva.',
+    mission: 'Dedicated to reviving traditional yoga and holistic wellness, offering free wholesome nutrition (Annadanam), providing free rural healthcare seva, and fostering cultural preservation across communities.',
     managingTrustee: process.env.MANAGING_TRUSTEE || 'Authorized Managing Trustee',
     merchantEmail: process.env.PRIMARY_MERCHANT_EMAIL || 'trustee@nonprofit.org',
     pan: process.env.PRIMARY_TRUST_PAN || 'XXXXX0000X',
@@ -204,12 +206,42 @@ const TRUST_PROFILES: Record<string, any> = {
     ifsc: process.env.PRIMARY_BANK_IFSC || 'BANK0000001',
     accountMasked: process.env.PRIMARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...XXXX',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
-    fcraRole: 'Designated Non-Profit / FCRA Utilization Account'
+    fcraRole: 'Designated Non-Profit / FCRA Utilization Account',
+    impactPillars: [
+      {
+        icon: '🧘',
+        title: 'Daily Yoga & Pranayama Seva',
+        description: 'Empowering thousands with daily traditional yoga sessions, breathwork, and meditation for chronic illness prevention and inner peace.'
+      },
+      {
+        icon: '🍲',
+        title: 'Annadanam (Community Nutrition)',
+        description: 'Providing daily fresh, wholesome satvic meals to rural seekers, underprivileged school children, and visiting pilgrims.'
+      },
+      {
+        icon: '🩺',
+        title: 'Holistic Rural Health Outreach',
+        description: 'Conducting free healthcare camps, Ayurvedic wellness screenings, and distributing remedies to underserved village families.'
+      },
+      {
+        icon: '🌱',
+        title: 'Vedic Heritage & Youth Guidance',
+        description: 'Preserving sacred wellness wisdom, conducting value-based youth retreats, and promoting sustainable eco-conscious community living.'
+      }
+    ],
+    fundUtilization: [
+      { label: 'Yoga Seva & Rural Wellness Camps', percent: 40, color: '#f59e0b' },
+      { label: 'Daily Annadanam & Food Distribution', percent: 35, color: '#10b981' },
+      { label: 'Youth Guidance & Value Education', percent: 15, color: '#38bdf8' },
+      { label: 'Statutory Auditing & Compliance', percent: 10, color: '#c084fc' }
+    ]
   },
   relaxation: {
     id: 'relaxation',
     name: process.env.SECONDARY_PROJECT_NAME || 'Mindful Living Initiative',
-    tagline: 'Promoting holistic stress relief, mindful meditation, and health programs.',
+    subtitle: 'Holistic Stress Reduction, Mindful Meditation & Emotional Well-Being',
+    tagline: 'Guiding modern seekers toward stress-free living, emotional balance, and restorative peace.',
+    mission: 'Empowering modern individuals, youth, and working families through scientifically grounded mindfulness, restorative breath alignment, and sound meditation retreats.',
     managingTrustee: process.env.MANAGING_TRUSTEE || 'Authorized Managing Trustee',
     merchantEmail: process.env.SECONDARY_MERCHANT_EMAIL || 'project@nonprofit.org',
     pan: process.env.SECONDARY_TRUST_PAN || 'YYYYY0000Y',
@@ -218,7 +250,35 @@ const TRUST_PROFILES: Record<string, any> = {
     ifsc: process.env.SECONDARY_BANK_IFSC || 'BANK0000002',
     accountMasked: process.env.SECONDARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...YYYY',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
-    fcraRole: 'Associated Non-Profit Project Account'
+    fcraRole: 'Associated Non-Profit Project Account',
+    impactPillars: [
+      {
+        icon: '🌿',
+        title: 'Mindfulness & Stress Relief',
+        description: 'Guiding professionals and seekers through practical meditation to eliminate chronic anxiety, fatigue, and workplace burnout.'
+      },
+      {
+        icon: '🧠',
+        title: 'Youth Emotional Resilience',
+        description: 'Specialized focus training, memory enhancement, and calming techniques taught freely at educational institutions.'
+      },
+      {
+        icon: '🎵',
+        title: 'Sound Healing & Breath Alignment',
+        description: 'Harmonious acoustic vibrations and pranic alignment sessions restoring natural circadian rhythms and emotional tranquility.'
+      },
+      {
+        icon: '🤝',
+        title: 'Compassionate Community Circles',
+        description: 'Inclusive support spaces cultivating empathy, mindful relationships, and positive mental health awareness.'
+      }
+    ],
+    fundUtilization: [
+      { label: 'Public Mindfulness & Peace Retreats', percent: 45, color: '#c084fc' },
+      { label: 'Youth University Mental Health Outreach', percent: 30, color: '#38bdf8' },
+      { label: 'Digital Guided Meditation Resources', percent: 15, color: '#10b981' },
+      { label: 'Statutory Auditing & Operational Upkeep', percent: 10, color: '#f59e0b' }
+    ]
   }
 };
 
