@@ -114,7 +114,33 @@ export async function initDatabase(): Promise<void> {
       backup_size_bytes INTEGER NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS email_dispatch_logs (
+      id TEXT PRIMARY KEY,
+      order_id TEXT,
+      donor_email TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      status TEXT NOT NULL,
+      message_id TEXT,
+      error_details TEXT,
+      sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
+
+  // Ensure receipt_email_sent column exists on donations
+  try {
+    if (isPostgres && pgPool) {
+      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS receipt_email_sent INTEGER DEFAULT 0;`);
+    } else if (sqliteDb) {
+      const colCheck = await sqliteDb.all(`PRAGMA table_info(donations);`);
+      const hasCol = colCheck.some((c: any) => c.name === 'receipt_email_sent');
+      if (!hasCol) {
+        await sqliteDb.run(`ALTER TABLE donations ADD COLUMN receipt_email_sent INTEGER DEFAULT 0;`);
+      }
+    }
+  } catch (err: any) {
+    // Non-fatal if column exists
+  }
 
   logger.info(`Embedded local database online at: ${dbFilePath} [WAL Mode Active]`, { dbFilePath, journalMode: 'WAL' }, 'DB_INIT');
 
@@ -159,7 +185,7 @@ export async function dbQuery(sql: string, params: any[] = []): Promise<{ rows: 
  * Append-Only Immutable Mirror Ledger
  * Records transaction events to an append-only JSONL file with SHA256 integrity hash
  */
-export function recordLedgerMirrorEvent(eventType: 'DONOR' | 'DONATION' | 'CAPTURE', payload: any): void {
+export function recordLedgerMirrorEvent(eventType: 'DONOR' | 'DONATION' | 'CAPTURE' | 'EMAIL_SENT', payload: any): void {
   try {
     const timestamp = new Date().toISOString();
     const eventString = JSON.stringify({ eventType, timestamp, payload });

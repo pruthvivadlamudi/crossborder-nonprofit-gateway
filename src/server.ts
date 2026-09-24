@@ -15,6 +15,11 @@ import {
   getDatabaseStatus
 } from './db';
 import { logger, requestLoggingMiddleware } from './logger';
+import {
+  sendDonationConfirmationEmail,
+  DonationEmailData,
+  renderDonationEmailHtml
+} from './email';
 
 dotenv.config();
 
@@ -584,6 +589,96 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
 });
 
 /**
+ * Helper: Asynchronous, Idempotent Post-Donation Email Workflow Trigger
+ * Catches payment completion, builds template, and dispatches via configured provider
+ */
+async function triggerDonationEmailWorkflow(orderId: string, correlationId?: string): Promise<void> {
+  try {
+    const res = await dbQuery(`
+      SELECT 
+        d.id as donation_id,
+        d.paypal_order_id,
+        d.paypal_capture_id,
+        d.gross_amount,
+        d.currency,
+        d.trust_id,
+        d.trust_name,
+        d.status,
+        d.created_at,
+        d.receipt_email_sent,
+        dn.first_name,
+        dn.last_name,
+        dn.email,
+        dn.nationality,
+        dn.country_of_residence
+      FROM donations d
+      LEFT JOIN donors dn ON d.donor_id = dn.id
+      WHERE d.paypal_order_id = $1
+    `, [orderId]);
+
+    if (!res.rows || res.rows.length === 0) {
+      logger.warn(`Email workflow: Donation order ${orderId} not found`, { orderId }, 'EMAIL_WORKFLOW', correlationId);
+      return;
+    }
+
+    const row = res.rows[0];
+
+    // Idempotency: Prevent duplicate dispatches if both client callback and webhook fire
+    if (row.receipt_email_sent === 1) {
+      logger.info(`Email workflow: Confirmation email already dispatched for order ${orderId}`, { orderId }, 'EMAIL_IDEMPOTENT', correlationId);
+      return;
+    }
+
+    if (!row.email) {
+      logger.warn(`Email workflow: No donor email attached to donation order ${orderId}`, { orderId }, 'EMAIL_WORKFLOW', correlationId);
+      return;
+    }
+
+    const profile = TRUST_PROFILES[row.trust_id] || TRUST_PROFILES.divya;
+    const campaignHost = process.env.BASE_URL || `http://localhost:${PORT}`;
+    const campaignUrl = `${campaignHost}/?trust=${row.trust_id}`;
+
+    const emailData: DonationEmailData = {
+      donorName: `${row.first_name || 'Generous'} ${row.last_name || 'Donor'}`.trim(),
+      donorEmail: row.email,
+      grossAmount: parseFloat(row.gross_amount) || 0,
+      currency: row.currency || 'USD',
+      paypalOrderId: row.paypal_order_id,
+      paypalCaptureId: row.paypal_capture_id,
+      donationDate: new Date(row.created_at || Date.now()).toUTCString(),
+      trustId: row.trust_id,
+      trustName: profile.name,
+      trustTagline: profile.tagline,
+      managingTrustee: profile.managingTrustee,
+      bankName: profile.bankName,
+      accountMasked: profile.accountMasked,
+      ifsc: profile.ifsc,
+      purposeCode: profile.purposeCode || 'P1301',
+      campaignUrl
+    };
+
+    const dispatchResult = await sendDonationConfirmationEmail(emailData, correlationId);
+
+    if (dispatchResult.success) {
+      await dbQuery(`
+        UPDATE donations
+        SET receipt_email_sent = 1, updated_at = CURRENT_TIMESTAMP
+        WHERE paypal_order_id = $1
+      `, [orderId]);
+
+      recordLedgerMirrorEvent('EMAIL_SENT', {
+        orderId,
+        donorEmail: row.email,
+        provider: dispatchResult.provider,
+        messageId: dispatchResult.messageId
+      });
+    }
+  } catch (err: any) {
+    logger.error('Unhandled exception in triggerDonationEmailWorkflow', err, { orderId }, correlationId);
+  }
+}
+
+/**
  * 3. Capture Donation Order
  */
 app.post('/api/donations/capture-order', async (req: Request, res: Response) => {
@@ -657,6 +752,11 @@ app.post('/api/donations/capture-order', async (req: Request, res: Response) => 
       logger.warn(`Backup on capture warning: ${e.message}`, { error: e.message }, 'DB_SNAPSHOT', (req as any).correlationId);
     }
 
+    // Trigger post-donation confirmation email workflow (non-blocking & idempotent)
+    triggerDonationEmailWorkflow(orderId, (req as any).correlationId).catch((err) => {
+      logger.error('Background post-capture email dispatch error', err, { orderId }, (req as any).correlationId);
+    });
+
     return res.json({
       status: 'COMPLETED',
       captureId,
@@ -709,6 +809,11 @@ app.post('/api/webhooks/paypal', async (req: AuthenticatedRequest, res: Response
           fee,
           net,
           source: 'WEBHOOK'
+        });
+
+        // Trigger post-donation confirmation email workflow (idempotent, non-blocking)
+        triggerDonationEmailWorkflow(orderId, (req as any).correlationId).catch((err) => {
+          logger.error('Background webhook email dispatch error', err, { orderId }, (req as any).correlationId);
         });
       }
     }
@@ -1224,9 +1329,111 @@ app.post('/api/admin/demo-donation', adminAuthMiddleware, async (req: Request, r
       fee,
       net
     });
+
+    // Trigger email confirmation for simulated donation test
+    triggerDonationEmailWorkflow(orderId, (req as any).correlationId).catch((err) => {
+      logger.error('Background demo email dispatch error', err, { orderId }, (req as any).correlationId);
+    });
   } catch (err: any) {
     logger.error('Demo donation error', err, undefined, (req as any).correlationId);
     res.status(500).json({ error: 'Failed to create demo donation.' });
+  }
+});
+
+/**
+ * 16. Transactional Email Dispatch Logs (Protected)
+ */
+app.get('/api/admin/email/logs', adminAuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const logs = await dbQuery(`
+      SELECT id, order_id, donor_email, provider, status, message_id, error_details, sent_at
+      FROM email_dispatch_logs
+      ORDER BY sent_at DESC
+      LIMIT 50
+    `);
+    res.json({ logs: logs.rows });
+  } catch (err: any) {
+    logger.error('Error fetching email dispatch logs', err, undefined, (req as any).correlationId);
+    res.status(500).json({ error: 'Failed to fetch email logs' });
+  }
+});
+
+/**
+ * 17. Test Email Dispatcher (Protected)
+ */
+app.post('/api/admin/email/test-send', adminAuthMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { to = 'donor@example.com', trustId = 'divya', amount = 50 } = req.body;
+    const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
+    const campaignHost = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+    const testData: DonationEmailData = {
+      donorName: 'Devotee Seva Supporter',
+      donorEmail: to,
+      grossAmount: parseFloat(amount) || 50,
+      currency: 'USD',
+      paypalOrderId: `TEST-ORD-${Date.now()}`,
+      paypalCaptureId: `TEST-CAP-${Date.now()}`,
+      donationDate: new Date().toUTCString(),
+      trustId,
+      trustName: profile.name,
+      trustTagline: profile.tagline,
+      managingTrustee: profile.managingTrustee,
+      bankName: profile.bankName,
+      accountMasked: profile.accountMasked,
+      ifsc: profile.ifsc,
+      purposeCode: profile.purposeCode,
+      campaignUrl: `${campaignHost}/?trust=${trustId}`
+    };
+
+    const result = await sendDonationConfirmationEmail(testData, (req as any).correlationId);
+    res.json({
+      status: 'DISPATCH_COMPLETED',
+      result,
+      recipient: to,
+      trust: profile.name
+    });
+  } catch (err: any) {
+    logger.error('Error sending test email', err, undefined, (req as any).correlationId);
+    res.status(500).json({ error: 'Failed to dispatch test email.' });
+  }
+});
+
+/**
+ * 18. Live Dynamic Email HTML Preview (Protected)
+ */
+app.get('/api/admin/email/preview', adminAuthMiddleware, (req: Request, res: Response) => {
+  try {
+    const trustId = (req.query.trustId as string) || 'divya';
+    const amount = parseFloat(req.query.amount as string) || 108;
+    const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
+    const campaignHost = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+    const previewData: DonationEmailData = {
+      donorName: 'Smt. Ananya & Sri Ramesh Sharma',
+      donorEmail: 'donor@example.org',
+      grossAmount: amount,
+      currency: 'USD',
+      paypalOrderId: 'ORD-PREVIEW-' + Math.floor(Math.random() * 900000 + 100000),
+      paypalCaptureId: 'CAP-PREVIEW-' + Math.floor(Math.random() * 900000 + 100000),
+      donationDate: new Date().toUTCString(),
+      trustId,
+      trustName: profile.name,
+      trustTagline: profile.tagline,
+      managingTrustee: profile.managingTrustee,
+      bankName: profile.bankName,
+      accountMasked: profile.accountMasked,
+      ifsc: profile.ifsc,
+      purposeCode: profile.purposeCode,
+      campaignUrl: `${campaignHost}/?trust=${trustId}`
+    };
+
+    const html = renderDonationEmailHtml(previewData);
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (err: any) {
+    logger.error('Error generating email preview', err, undefined, (req as any).correlationId);
+    res.status(500).send('<h3>Failed to render email preview</h3>');
   }
 });
 
