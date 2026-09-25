@@ -13,6 +13,7 @@ dist/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.db
 donations.sqlite*
 
 # Security Keys & Certificates

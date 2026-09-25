@@ -1132,9 +1132,12 @@ app.get('/api/admin/stats', adminAuthMiddleware, async (req: Request, res: Respo
     let sql = `
       SELECT 
         COUNT(*) as total_donations,
-        COALESCE(SUM(gross_amount), 0) as total_usd,
-        COALESCE(SUM(paypal_fee), 0) as total_fees,
-        COALESCE(SUM(net_amount), 0) as total_net,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'USD' THEN gross_amount ELSE 0 END), 0) as total_usd_gross,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'USD' THEN paypal_fee ELSE 0 END), 0) as total_usd_fees,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'USD' THEN net_amount ELSE 0 END), 0) as total_usd_net,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN gross_amount ELSE 0 END), 0) as total_inr_gross,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN paypal_fee ELSE 0 END), 0) as total_inr_fees,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN net_amount ELSE 0 END), 0) as total_inr_net,
         COUNT(DISTINCT donor_id) as unique_donors
       FROM donations
       WHERE status = 'CAPTURED'
@@ -1148,15 +1151,23 @@ app.get('/api/admin/stats', adminAuthMiddleware, async (req: Request, res: Respo
     const stats = await dbQuery(sql, params);
     const row = stats.rows[0];
 
-    // Estimated INR realized (wholesale card exchange rate ~ ₹83.50/USD)
-    const totalInr = Math.round((parseFloat(row.total_net) || 0) * 83.50);
+    const usdGross = parseFloat(row.total_usd_gross) || 0;
+    const usdFees = parseFloat(row.total_usd_fees) || 0;
+    const usdNet = parseFloat(row.total_usd_net) || 0;
+    const inrGross = parseFloat(row.total_inr_gross) || 0;
+    const inrNet = parseFloat(row.total_inr_net) || 0;
+
+    // Realized INR credited to Trust bank accounts: USD converted at wholesale rate (~₹83.50/USD) + direct domestic INR
+    const totalInrRealized = Math.round((usdNet * 83.50) + inrNet);
 
     res.json({
       totalDonations: parseInt(row.total_donations, 10),
-      totalGrossUsd: parseFloat(row.total_usd).toFixed(2),
-      totalFeesUsd: parseFloat(row.total_fees).toFixed(2),
-      totalNetUsd: parseFloat(row.total_net).toFixed(2),
-      totalInrRealized: totalInr.toLocaleString('en-IN'),
+      totalGrossUsd: usdGross.toFixed(2),
+      totalGrossInr: inrGross.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      totalFeesUsd: usdFees.toFixed(2),
+      totalNetUsd: usdNet.toFixed(2),
+      totalNetInr: inrNet.toLocaleString('en-IN', { minimumFractionDigits: 2 }),
+      totalInrRealized: totalInrRealized.toLocaleString('en-IN'),
       uniqueDonors: parseInt(row.unique_donors, 10)
     });
   } catch (err: any) {
@@ -1186,6 +1197,9 @@ app.get('/api/admin/donations', adminAuthMiddleware, async (req: Request, res: R
         d.status,
         d.fcra_purpose,
         d.fcra_financial_year,
+        d.payment_method,
+        d.upi_vpa,
+        d.upi_ref,
         dn.first_name,
         dn.last_name,
         dn.email,
@@ -1217,13 +1231,13 @@ app.get('/api/admin/donations', adminAuthMiddleware, async (req: Request, res: R
  */
 app.get('/api/admin/analytics', adminAuthMiddleware, async (req: Request, res: Response) => {
   try {
-    // 1. Time-series daily trend
+    // 1. Time-series daily trend (normalized to USD value for standard chart comparison)
     const timelineSql = `
       SELECT 
         SUBSTR(created_at, 1, 10) as date_key,
         COUNT(*) as count,
-        COALESCE(SUM(gross_amount), 0) as gross_usd,
-        COALESCE(SUM(net_amount), 0) as net_usd
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN gross_amount / 83.50 ELSE gross_amount END), 0) as gross_usd,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN net_amount / 83.50 ELSE net_amount END), 0) as net_usd
       FROM donations
       WHERE status = 'CAPTURED'
       GROUP BY SUBSTR(created_at, 1, 10)
@@ -1238,8 +1252,8 @@ app.get('/api/admin/analytics', adminAuthMiddleware, async (req: Request, res: R
         trust_id,
         trust_name,
         COUNT(*) as count,
-        COALESCE(SUM(gross_amount), 0) as gross_usd,
-        COALESCE(SUM(net_amount), 0) as net_usd
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN gross_amount / 83.50 ELSE gross_amount END), 0) as gross_usd,
+        COALESCE(SUM(CASE WHEN UPPER(currency) = 'INR' THEN net_amount / 83.50 ELSE net_amount END), 0) as net_usd
       FROM donations
       WHERE status = 'CAPTURED'
       GROUP BY trust_id, trust_name;
@@ -1249,28 +1263,44 @@ app.get('/api/admin/analytics', adminAuthMiddleware, async (req: Request, res: R
     // 3. Country distribution
     const countrySql = `
       SELECT 
-        dn.country_of_residence as country,
+        CASE 
+          WHEN LOWER(TRIM(dn.country_of_residence)) IN ('in', 'india') THEN 'India'
+          ELSE dn.country_of_residence 
+        END as country,
         COUNT(*) as count,
-        COALESCE(SUM(d.gross_amount), 0) as gross_usd
+        COALESCE(SUM(CASE WHEN UPPER(d.currency) = 'INR' THEN d.gross_amount / 83.50 ELSE d.gross_amount END), 0) as gross_usd
       FROM donations d
       JOIN donors dn ON d.donor_id = dn.id
       WHERE d.status = 'CAPTURED'
-      GROUP BY dn.country_of_residence
+      GROUP BY 
+        CASE 
+          WHEN LOWER(TRIM(dn.country_of_residence)) IN ('in', 'india') THEN 'India'
+          ELSE dn.country_of_residence 
+        END
       ORDER BY gross_usd DESC
       LIMIT 10;
     `;
     const countryRes = await dbQuery(countrySql);
 
-    // 4. NRI vs Foreign National breakdown
+    // 4. India Resident vs NRI vs Foreign National breakdown
     const categorySql = `
       SELECT 
-        CASE WHEN dn.is_nri = 1 THEN 'Non-Resident Indian (NRI)' ELSE 'Foreign National' END as category,
+        CASE 
+          WHEN LOWER(TRIM(dn.country_of_residence)) IN ('in', 'india') THEN 'India'
+          WHEN dn.is_nri = 1 THEN 'Non-Resident Indian (NRI)' 
+          ELSE 'Foreign National' 
+        END as category,
         COUNT(*) as count,
-        COALESCE(SUM(d.gross_amount), 0) as gross_usd
+        COALESCE(SUM(CASE WHEN UPPER(d.currency) = 'INR' THEN d.gross_amount / 83.50 ELSE d.gross_amount END), 0) as gross_usd
       FROM donations d
       JOIN donors dn ON d.donor_id = dn.id
       WHERE d.status = 'CAPTURED'
-      GROUP BY dn.is_nri;
+      GROUP BY 
+        CASE 
+          WHEN LOWER(TRIM(dn.country_of_residence)) IN ('in', 'india') THEN 'India'
+          WHEN dn.is_nri = 1 THEN 'Non-Resident Indian (NRI)' 
+          ELSE 'Foreign National' 
+        END;
     `;
     const categoryRes = await dbQuery(categorySql);
 
@@ -1309,6 +1339,9 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
         d.status,
         d.fcra_purpose,
         d.fcra_financial_year,
+        d.payment_method,
+        d.upi_vpa,
+        d.upi_ref,
         dn.id as donor_id,
         dn.first_name,
         dn.last_name,
@@ -1334,18 +1367,31 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
     const fee = parseFloat(tx.paypal_fee) || 0;
     const net = parseFloat(tx.net_amount) || (gross - fee);
     const fxRate = 83.50;
-    const realizedInr = Math.round(net * fxRate);
+    const isDomesticInr = (tx.currency || '').toUpperCase() === 'INR' || (tx.payment_method || '').toUpperCase() === 'UPI';
+    const realizedInr = isDomesticInr ? Math.round(net) : Math.round(net * fxRate);
     const feePercent = gross > 0 ? ((fee / gross) * 100).toFixed(2) : '0.00';
 
-    // Structured Financial Waterfall & Subline Items
+    // Structured Financial Waterfall & Subline Items (Customized by Currency & Payment Method)
     const lineItems = [
       {
         lineNumber: 1,
-        title: `Foreign Contribution to ${tx.trust_name}`,
+        title: isDomesticInr 
+          ? `Domestic Seva Contribution to ${tx.trust_name}` 
+          : `Foreign Contribution to ${tx.trust_name}`,
         purpose: tx.fcra_purpose,
-        currency: tx.currency,
+        currency: tx.currency || (isDomesticInr ? 'INR' : 'USD'),
         grossAmount: gross,
-        sublineItems: [
+        sublineItems: isDomesticInr ? [
+          { label: 'Gross Donated Amount', value: `₹${gross.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} INR`, type: 'credit' },
+          { label: tx.payment_method === 'UPI' ? 'UPI Domestic Processing Surcharge (0%)' : `Merchant Fee (${feePercent}%)`, value: `₹${fee.toFixed(2)} INR`, type: 'deduction' },
+          { label: 'Net Gateway Settlement', value: `₹${net.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} INR`, type: 'net' },
+          { label: 'Currency Settlement & FX Conversion', value: 'Direct Domestic Settlement (1:1 INR - No Foreign Exchange Required)', type: 'conversion' },
+          { label: 'Estimated Realized Bank Credit', value: `₹${realizedInr.toLocaleString('en-IN')}`, type: 'realized' },
+          { label: 'Settlement Bank Account', value: `${profile.bankName} (${profile.accountMasked}, IFSC: ${profile.ifsc})`, type: 'destination' },
+          { label: 'Remittance Mode / Payee VPA', value: `${tx.payment_method || 'UPI'} (${tx.upi_vpa || profile.upiVpa || 'charity.seva@sbi'})`, type: 'statutory' },
+          { label: 'Bank UTR / Transaction Reference', value: tx.upi_ref || tx.paypal_capture_id || tx.paypal_order_id, type: 'statutory' },
+          { label: 'Statutory Regime / Tax Receipt', value: `${tx.fcra_financial_year} (Direct Domestic Charitable Seva)`, type: 'statutory' }
+        ] : [
           { label: 'Gross Donated Amount', value: `$${gross.toFixed(2)} USD`, type: 'credit' },
           { label: `PayPal Merchant Fee (${feePercent}%)`, value: `-$${fee.toFixed(2)} USD`, type: 'deduction' },
           { label: 'Net Gateway Settlement', value: `$${net.toFixed(2)} USD`, type: 'net' },
@@ -1358,12 +1404,24 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
       }
     ];
 
+    // Determine accurate donor statutory category:
+    // If the donor is residing in India, category MUST be 'India', not 'Foreign National'.
+    const countryClean = (tx.country_of_residence || '').trim().toLowerCase();
+    const isResidingInIndia = countryClean === 'india' || countryClean === 'in' || countryClean === 'ind';
+
+    let donorCategory = 'Foreign National';
+    if (isResidingInIndia) {
+      donorCategory = 'India';
+    } else if (tx.is_nri === 1 || (tx.nationality || '').trim().toLowerCase() === 'indian') {
+      donorCategory = 'Non-Resident Indian (NRI)';
+    }
+
     const donorKyc = {
       fullName: `${tx.first_name} ${tx.last_name}`,
       email: tx.email,
       nationality: tx.nationality,
-      isNri: tx.is_nri === 1,
-      category: tx.is_nri === 1 ? 'Non-Resident Indian (NRI)' : 'Foreign National',
+      isNri: isResidingInIndia ? false : tx.is_nri === 1,
+      category: donorCategory,
       passportOrIdNumber: tx.passport_or_id_number || 'N/A',
       countryOfResidence: tx.country_of_residence,
       residentialAddress: tx.residential_address
@@ -1371,9 +1429,9 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
 
     const auditTrail = [
       { stage: 'ORDER_INITIATED', time: tx.created_at, reference: tx.paypal_order_id, status: 'COMPLETED' },
-      { stage: 'PAYMENT_CAPTURED', time: tx.updated_at, reference: tx.paypal_capture_id || 'PENDING', status: tx.status },
+      { stage: 'PAYMENT_CAPTURED', time: tx.updated_at, reference: tx.upi_ref || tx.paypal_capture_id || 'PENDING', status: tx.status },
       { stage: 'LEDGER_RECORDED', time: tx.updated_at, reference: tx.idempotency_key, status: 'RECORDED' },
-      { stage: 'FC4_COMPLIANCE_INDEXED', time: tx.updated_at, reference: `FY-${tx.fcra_financial_year}`, status: 'ACTIVE' }
+      { stage: isDomesticInr ? 'DOMESTIC_10BE_INDEXED' : 'FC4_COMPLIANCE_INDEXED', time: tx.updated_at, reference: `FY-${tx.fcra_financial_year}`, status: 'ACTIVE' }
     ];
 
     res.json({
@@ -1387,6 +1445,8 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
       rawIdentifiers: {
         paypalOrderId: tx.paypal_order_id,
         paypalCaptureId: tx.paypal_capture_id,
+        upiRef: tx.upi_ref,
+        paymentMethod: tx.payment_method,
         idempotencyKey: tx.idempotency_key
       }
     });
@@ -1455,7 +1515,11 @@ app.get('/api/admin/fc4-export', adminAuthMiddleware, async (req: Request, res: 
         d.trust_name,
         (dn.first_name || ' ' || dn.last_name) AS donor_full_name,
         dn.nationality,
-        CASE WHEN dn.is_nri = 1 THEN 'Yes (NRI)' ELSE 'No (Foreign National)' END AS is_nri,
+        CASE 
+          WHEN LOWER(TRIM(dn.country_of_residence)) IN ('in', 'india') THEN 'India'
+          WHEN dn.is_nri = 1 THEN 'Yes (NRI)' 
+          ELSE 'No (Foreign National)' 
+        END AS is_nri,
         COALESCE(dn.passport_or_id_number, 'N/A') AS passport_id,
         dn.country_of_residence,
         dn.residential_address,
@@ -1463,9 +1527,9 @@ app.get('/api/admin/fc4-export', adminAuthMiddleware, async (req: Request, res: 
         d.gross_amount,
         d.paypal_fee,
         d.net_amount,
-        ROUND(d.net_amount * 83.50, 2) AS estimated_inr_credit,
+        ROUND(CASE WHEN UPPER(d.currency) = 'INR' THEN d.net_amount ELSE d.net_amount * 83.50 END, 2) AS estimated_inr_credit,
         d.fcra_purpose,
-        d.paypal_capture_id
+        COALESCE(d.upi_ref, d.paypal_capture_id) AS paypal_capture_id
       FROM donations d
       JOIN donors dn ON d.donor_id = dn.id
       WHERE d.status = 'CAPTURED'

@@ -623,6 +623,7 @@
         <div class="form-group">
           <label for="country">Country of Residence *</label>
           <select id="country" required>
+            <option value="India">India (IN)</option>
             <option value="US">United States (US)</option>
             <option value="GB">United Kingdom (GB)</option>
             <option value="CA">Canada (CA)</option>
@@ -1146,6 +1147,9 @@
         <button type="button" class="amount-btn" onclick="selectAmount(250)">$250</button>
       `;
       selectAmount(50);
+      if (document.getElementById('country').value === 'India') {
+        document.getElementById('country').value = 'US';
+      }
     } else {
       amountLabel.textContent = 'Donation Amount (INR / ₹) *';
       customAmountInput.placeholder = 'Custom INR Amount (₹)';
@@ -1157,6 +1161,12 @@
         <button type="button" class="amount-btn" onclick="selectAmount(5000)">₹5,000</button>
       `;
       selectAmount(1000);
+      // Auto-set domestic Indian donor attributes for UPI
+      document.getElementById('country').value = 'India';
+      if (!document.getElementById('nationality').value) {
+        document.getElementById('nationality').value = 'Indian';
+      }
+      document.getElementById('isNri').checked = false;
     }
 
     validateAndRender();
