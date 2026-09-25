@@ -8,6 +8,9 @@
     "build": "tsc && node -e \"require('fs').cpSync('src/public', 'dist/public', {recursive: true})\"",
     "start": "node dist/server.js"
   },
+  "engines": {
+    "node": "20.x"
+  },
   "keywords": [
     "paypal",
     "donations",
