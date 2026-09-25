@@ -362,7 +362,7 @@ export async function sendDonationConfirmationEmail(
     } catch (err: any) {
       logger.error('Failed to send donation email via Resend', err, { orderId: data.paypalOrderId, donorEmail: data.donorEmail }, correlationId);
       await logEmailDispatch(data, 'resend', 'FAILURE', undefined, err.message);
-      return { success: false, provider: 'resend', error: err.message };
+      return { success: false, provider: 'resend', error: `${err.message} (Key prefix: '${resendApiKey.slice(0, 7)}...', length: ${resendApiKey.length})` };
     }
   }
 
