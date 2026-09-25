@@ -23,6 +23,10 @@ export interface DonationEmailData {
   ifsc?: string;
   purposeCode?: string;
   campaignUrl?: string;
+  paymentMethod?: 'PAYPAL' | 'UPI' | string;
+  upiVpa?: string;
+  upiRef?: string;
+  instagramHandle?: string;
 }
 
 /**
@@ -38,19 +42,27 @@ export interface EmailDispatchResult {
 
 /**
  * Social Sharing Link Generator
- * Generates pre-formatted, URL-encoded sharing URLs for WhatsApp, X (Twitter), LinkedIn, and Facebook
+ * Generates pre-formatted, URL-encoded sharing URLs for WhatsApp, X (Twitter), Instagram, and Direct Portal Link
  */
-export function generateSocialShareLinks(trustName: string, campaignUrl: string) {
+export function generateSocialShareLinks(
+  trustName: string,
+  campaignUrl: string,
+  instagramHandle: string = 'divyayoga.seva'
+) {
   const cleanUrl = campaignUrl || 'https://your-domain.duckdns.org';
   const shareMessage = `I just made a charitable contribution to support ${trustName}! Join me in empowering community health, yoga seva, and wellness:`;
-  
+  const cleanTrustTag = trustName.replace(/[^a-zA-Z0-9]/g, '');
+
   const encodedText = encodeURIComponent(shareMessage);
   const encodedUrl = encodeURIComponent(cleanUrl);
+
+  const instagramCaption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, wholesome annadanam meals, and rural healthcare: ${cleanUrl} \n\n#Seva #Charity #${cleanTrustTag} #MakeADifference`;
 
   return {
     whatsapp: `https://api.whatsapp.com/send?text=${encodedText}%20${encodedUrl}`,
     twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
-    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`,
+    instagram: `https://www.instagram.com/`,
+    instagramCaption,
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
     directLink: cleanUrl
   };
@@ -58,12 +70,15 @@ export function generateSocialShareLinks(trustName: string, campaignUrl: string)
 
 /**
  * Dynamic, High-Fidelity HTML Email Template
- * Mobile-responsive, cross-client compatible (Gmail, Apple Mail, Outlook), with traditional sacred motif
+ * Mobile-responsive, cross-client compatible (Gmail, Apple Mail, Outlook), supporting both PayPal & UPI
  */
 export function renderDonationEmailHtml(data: DonationEmailData): string {
-  const shareLinks = generateSocialShareLinks(data.trustName, data.campaignUrl || '');
+  const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
+  const shareLinks = generateSocialShareLinks(data.trustName, data.campaignUrl || '', data.instagramHandle);
   const estimatedInr = Math.round(data.grossAmount * 83.50).toLocaleString('en-IN');
-  const formattedGross = data.grossAmount.toFixed(2);
+  const formattedGross = isUpi
+    ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
+    : `$${data.grossAmount.toFixed(2)} USD`;
   const purpose = data.purposeCode || 'P1301';
   const trusteeName = data.managingTrustee || 'Authorized Managing Trustee';
 
@@ -99,7 +114,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
             ${escapeHtml(data.trustName)}
           </h1>
           <div style="color: #94a3b8; font-size: 13px;">
-            ${escapeHtml(data.trustTagline || 'Regulated Non-Profit Foreign Contribution Gateway')}
+            ${escapeHtml(data.trustTagline || 'Regulated Non-Profit Foreign & Domestic Contribution Gateway')}
           </div>
         </td>
       </tr>
@@ -119,7 +134,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
                   Heartfelt Gratitude for Your Seva, ${escapeHtml(data.donorName)}!
                 </h2>
                 <p style="color: #374151; font-size: 14px; margin: 0; line-height: 1.5;">
-                  Your contribution of <strong style="color: #0284c7;">$${formattedGross} USD</strong> has been successfully verified and credited.
+                  Your contribution of <strong style="color: #0284c7;">${formattedGross}</strong> has been successfully verified and credited.
                 </p>
               </td>
             </tr>
@@ -128,7 +143,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
           <!-- Personalized Note -->
           <p style="font-size: 14px; line-height: 1.65; color: #334155; margin-bottom: 20px;">
             Dear <strong>${escapeHtml(data.donorName)}</strong>,<br><br>
-            On behalf of <strong>${escapeHtml(data.trustName)}</strong>, our trustees, and the communities served, we gratefully acknowledge your cross-border contribution. Your generosity directly powers our sacred seva initiatives—providing daily wholesome nutrition, free yoga and wellness camps, and rural healthcare outreach to those in need.
+            On behalf of <strong>${escapeHtml(data.trustName)}</strong>, our trustees, and the communities served, we gratefully acknowledge your generous contribution. Your support directly powers our sacred seva initiatives—providing daily wholesome nutrition, free yoga and wellness camps, and rural healthcare outreach to those in need.
           </p>
 
           <!-- Official Receipt Details Table -->
@@ -141,7 +156,13 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
             <tr>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Contribution Amount:</td>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #0284c7; font-size: 15px;">
-                $${formattedGross} USD <span style="font-size: 12px; color: #64748b; font-weight: 500;">(~₹${estimatedInr} INR)</span>
+                ${isUpi ? `₹${data.grossAmount.toLocaleString('en-IN')} INR` : `$${data.grossAmount.toFixed(2)} USD <span style="font-size: 12px; color: #64748b; font-weight: 500;">(~₹${estimatedInr} INR)</span>`}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Payment Method:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #0f172a;">
+                ${isUpi ? '📱 UPI (Unified Payments Interface / India)' : '💳 PayPal Global Gateway (USD)'}
               </td>
             </tr>
             <tr>
@@ -151,11 +172,19 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
               </td>
             </tr>
             <tr>
-              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">PayPal Reference:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Transaction Reference:</td>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #334155;">
-                ${escapeHtml(data.paypalCaptureId || data.paypalOrderId)}
+                ${escapeHtml(data.upiRef || data.paypalCaptureId || data.paypalOrderId)}
               </td>
             </tr>
+            ${isUpi ? `
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Beneficiary VPA:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #0284c7; font-weight: 600;">
+                ${escapeHtml(data.upiVpa || 'charity.seva@sbi')}
+              </td>
+            </tr>
+            ` : ''}
             <tr>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Beneficiary Entity:</td>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #0f172a; font-weight: 600;">
@@ -189,7 +218,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
             </ul>
           </div>
 
-          <!-- Social Sharing & Campaign Multiplier -->
+          <!-- Social Sharing & Campaign Multiplier (Instagram, WhatsApp, X, Direct Link) -->
           <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 24px; margin-bottom: 24px;">
             <div style="font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
               🌟 Inspire Others to Support This Sacred Mission
@@ -206,25 +235,25 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
                     <tr>
                       <!-- WhatsApp -->
                       <td style="padding: 4px;">
-                        <a href="${shareLinks.whatsapp}" target="_blank" style="display: inline-block; background-color: #25D366; color: #ffffff; text-decoration: none; padding: 9px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                        <a href="${shareLinks.whatsapp}" target="_blank" style="display: inline-block; background-color: #25D366; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
                           💬 WhatsApp
                         </a>
                       </td>
                       <!-- X / Twitter -->
                       <td style="padding: 4px;">
-                        <a href="${shareLinks.twitter}" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 9px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                        <a href="${shareLinks.twitter}" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
                           𝕏 Share
                         </a>
                       </td>
-                      <!-- LinkedIn -->
+                      <!-- Instagram (Replaces LinkedIn) -->
                       <td style="padding: 4px;">
-                        <a href="${shareLinks.linkedin}" target="_blank" style="display: inline-block; background-color: #0077b5; color: #ffffff; text-decoration: none; padding: 9px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
-                          💼 LinkedIn
+                        <a href="${shareLinks.instagram}" target="_blank" style="display: inline-block; background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                          📸 Instagram
                         </a>
                       </td>
                       <!-- Direct Link -->
                       <td style="padding: 4px;">
-                        <a href="${shareLinks.directLink}" target="_blank" style="display: inline-block; background-color: #d97706; color: #ffffff; text-decoration: none; padding: 9px 16px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                        <a href="${shareLinks.directLink}" target="_blank" style="display: inline-block; background-color: #d97706; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
                           🌐 View Portal
                         </a>
                       </td>
@@ -233,6 +262,12 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
                 </td>
               </tr>
             </table>
+
+            <!-- Instagram Story Toolkit Suggestion -->
+            <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 12px 14px; margin-top: 14px; text-align: left; font-size: 12px; color: #6b21a8; line-height: 1.5;">
+              <strong>📸 Instagram Story Sharing Tip:</strong><br>
+              Share your contribution to your Instagram Story! Tag <strong>@${escapeHtml(data.instagramHandle || 'divyayoga.seva')}</strong> and paste our direct portal link (<a href="${escapeHtml(shareLinks.directLink)}" style="color: #9333ea; text-decoration: underline;">${escapeHtml(shareLinks.directLink)}</a>) to inspire your network.
+            </div>
           </div>
 
           <!-- Trustee Signature Block -->
@@ -287,7 +322,11 @@ export async function sendDonationConfirmationEmail(
 ): Promise<EmailDispatchResult> {
   const fromEmail = process.env.EMAIL_FROM || process.env.RESEND_FROM || 'donations@yourtrust.org';
   const fromName = data.trustName || 'Non-Profit Charitable Trust';
-  const subject = `Tax Receipt & Confirmation: $${data.grossAmount.toFixed(2)} USD Donation to ${data.trustName}`;
+  const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
+  const amountStr = isUpi
+    ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
+    : `$${data.grossAmount.toFixed(2)} USD`;
+  const subject = `Official Tax Receipt & Confirmation: ${amountStr} Donation to ${data.trustName}`;
   const htmlContent = renderDonationEmailHtml(data);
 
   // 1. Resend Provider (Recommended: 3,000 free emails/month via simple REST)

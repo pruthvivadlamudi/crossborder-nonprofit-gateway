@@ -127,19 +127,34 @@ export async function initDatabase(): Promise<void> {
     );
   `);
 
-  // Ensure receipt_email_sent column exists on donations
+  // Ensure receipt_email_sent and UPI columns exist on donations
   try {
     if (isPostgres && pgPool) {
       await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS receipt_email_sent INTEGER DEFAULT 0;`);
+      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'PAYPAL';`);
+      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS upi_vpa TEXT;`);
+      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS upi_ref TEXT;`);
     } else if (sqliteDb) {
       const colCheck = await sqliteDb.all(`PRAGMA table_info(donations);`);
       const hasCol = colCheck.some((c: any) => c.name === 'receipt_email_sent');
       if (!hasCol) {
         await sqliteDb.run(`ALTER TABLE donations ADD COLUMN receipt_email_sent INTEGER DEFAULT 0;`);
       }
+      const hasPaymentMethod = colCheck.some((c: any) => c.name === 'payment_method');
+      if (!hasPaymentMethod) {
+        await sqliteDb.run(`ALTER TABLE donations ADD COLUMN payment_method TEXT DEFAULT 'PAYPAL';`);
+      }
+      const hasUpiVpa = colCheck.some((c: any) => c.name === 'upi_vpa');
+      if (!hasUpiVpa) {
+        await sqliteDb.run(`ALTER TABLE donations ADD COLUMN upi_vpa TEXT;`);
+      }
+      const hasUpiRef = colCheck.some((c: any) => c.name === 'upi_ref');
+      if (!hasUpiRef) {
+        await sqliteDb.run(`ALTER TABLE donations ADD COLUMN upi_ref TEXT;`);
+      }
     }
   } catch (err: any) {
-    // Non-fatal if column exists
+    // Non-fatal if columns exist
   }
 
   logger.info(`Embedded local database online at: ${dbFilePath} [WAL Mode Active]`, { dbFilePath, journalMode: 'WAL' }, 'DB_INIT');
@@ -185,7 +200,10 @@ export async function dbQuery(sql: string, params: any[] = []): Promise<{ rows: 
  * Append-Only Immutable Mirror Ledger
  * Records transaction events to an append-only JSONL file with SHA256 integrity hash
  */
-export function recordLedgerMirrorEvent(eventType: 'DONOR' | 'DONATION' | 'CAPTURE' | 'EMAIL_SENT', payload: any): void {
+export function recordLedgerMirrorEvent(
+  eventType: 'DONOR' | 'DONATION' | 'CAPTURE' | 'EMAIL_SENT' | 'UPI_INITIATE' | 'UPI_SUCCESS',
+  payload: any
+): void {
   try {
     const timestamp = new Date().toISOString();
     const eventString = JSON.stringify({ eventType, timestamp, payload });

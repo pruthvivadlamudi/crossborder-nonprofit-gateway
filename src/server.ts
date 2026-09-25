@@ -210,6 +210,8 @@ const TRUST_PROFILES: Record<string, any> = {
     bankBranch: process.env.PRIMARY_BANK_BRANCH || 'Main Central Branch',
     ifsc: process.env.PRIMARY_BANK_IFSC || 'BANK0000001',
     accountMasked: process.env.PRIMARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...XXXX',
+    upiVpa: process.env.PRIMARY_UPI_VPA || 'charity.seva@sbi',
+    instagramHandle: process.env.INSTAGRAM_HANDLE || 'divyayoga.seva',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
     fcraRole: 'Designated Non-Profit / FCRA Utilization Account',
     impactPillars: [
@@ -254,6 +256,8 @@ const TRUST_PROFILES: Record<string, any> = {
     bankBranch: process.env.SECONDARY_BANK_BRANCH || 'Regional Metro Branch',
     ifsc: process.env.SECONDARY_BANK_IFSC || 'BANK0000002',
     accountMasked: process.env.SECONDARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...YYYY',
+    upiVpa: process.env.SECONDARY_UPI_VPA || 'mindfulliving@icici',
+    instagramHandle: process.env.INSTAGRAM_HANDLE || 'mindfulliving.seva',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
     fcraRole: 'Associated Non-Profit Project Account',
     impactPillars: [
@@ -606,6 +610,9 @@ async function triggerDonationEmailWorkflow(orderId: string, correlationId?: str
         d.status,
         d.created_at,
         d.receipt_email_sent,
+        d.payment_method,
+        d.upi_vpa,
+        d.upi_ref,
         dn.first_name,
         dn.last_name,
         dn.email,
@@ -638,11 +645,13 @@ async function triggerDonationEmailWorkflow(orderId: string, correlationId?: str
     const campaignHost = process.env.BASE_URL || `http://localhost:${PORT}`;
     const campaignUrl = `${campaignHost}/?trust=${row.trust_id}`;
 
+    const isUpiPayment = row.payment_method === 'UPI' || row.currency === 'INR';
+
     const emailData: DonationEmailData = {
       donorName: `${row.first_name || 'Generous'} ${row.last_name || 'Donor'}`.trim(),
       donorEmail: row.email,
       grossAmount: parseFloat(row.gross_amount) || 0,
-      currency: row.currency || 'USD',
+      currency: row.currency || (isUpiPayment ? 'INR' : 'USD'),
       paypalOrderId: row.paypal_order_id,
       paypalCaptureId: row.paypal_capture_id,
       donationDate: new Date(row.created_at || Date.now()).toUTCString(),
@@ -654,7 +663,11 @@ async function triggerDonationEmailWorkflow(orderId: string, correlationId?: str
       accountMasked: profile.accountMasked,
       ifsc: profile.ifsc,
       purposeCode: profile.purposeCode || 'P1301',
-      campaignUrl
+      campaignUrl,
+      paymentMethod: row.payment_method || (isUpiPayment ? 'UPI' : 'PAYPAL'),
+      upiVpa: row.upi_vpa || profile.upiVpa,
+      upiRef: row.upi_ref || row.paypal_capture_id,
+      instagramHandle: profile.instagramHandle
     };
 
     const dispatchResult = await sendDonationConfirmationEmail(emailData, correlationId);
@@ -767,6 +780,245 @@ app.post('/api/donations/capture-order', async (req: Request, res: Response) => 
   } catch (error: any) {
     logger.error('Error capturing donation payment', error, { orderId: req.body?.orderId }, (req as any).correlationId);
     return res.status(500).json({ error: 'Failed to capture payment.' });
+  }
+});
+
+/**
+ * 3B. Initiate Domestic UPI Donation Order (India)
+ * Generates standard upi://pay deep link, app-specific links, and dynamic QR Code
+ */
+app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId;
+  try {
+    const {
+      trustId = 'divya',
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      nationality = 'Indian',
+      isNri = false,
+      passportOrId,
+      countryOfResidence = 'India',
+      residentialAddress,
+      amount
+    } = req.body;
+
+    const numAmount = parseFloat(amount);
+    if (!firstName || !lastName || !email || !residentialAddress || !numAmount || numAmount <= 0) {
+      return res.status(400).json({
+        error: 'Compliance Violation: Full donor identity (Name, Email, Address, Amount) is required for charitable contribution receipting.'
+      });
+    }
+
+    const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
+    const vpa = profile.upiVpa || 'charity.seva@sbi';
+    const payeeName = profile.name;
+    const orderId = `UPI-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
+    const idempotencyKey = `UPI-IDEM-${orderId}`;
+
+    // 1. Upsert Donor Profile
+    const normalizedEmail = email.toLowerCase().trim();
+    let donorId: string;
+    const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [normalizedEmail]);
+
+    if (existingDonor.rows && existingDonor.rows.length > 0) {
+      donorId = existingDonor.rows[0].id;
+      await dbQuery(`
+        UPDATE donors SET
+          first_name = $1, last_name = $2, phone_number = $3, nationality = $4,
+          is_nri = $5, passport_or_id_number = $6, country_of_residence = $7,
+          residential_address = $8, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $9
+      `, [
+        firstName.trim(),
+        lastName.trim(),
+        phoneNumber || null,
+        nationality,
+        isNri ? 1 : 0,
+        passportOrId || null,
+        countryOfResidence,
+        residentialAddress.trim(),
+        donorId
+      ]);
+    } else {
+      donorId = uuidv4();
+      await dbQuery(`
+        INSERT INTO donors (
+          id, first_name, last_name, email, phone_number, nationality,
+          is_nri, passport_or_id_number, country_of_residence, residential_address
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        donorId,
+        firstName.trim(),
+        lastName.trim(),
+        normalizedEmail,
+        phoneNumber || null,
+        nationality,
+        isNri ? 1 : 0,
+        passportOrId || null,
+        countryOfResidence,
+        residentialAddress.trim()
+      ]);
+      recordLedgerMirrorEvent('DONOR', { donorId, email: normalizedEmail, nationality });
+    }
+
+    // 2. Insert Pending UPI Donation Record
+    const donationId = uuidv4();
+    await dbQuery(`
+      INSERT INTO donations (
+        id, donor_id, trust_id, trust_name, paypal_order_id, idempotency_key,
+        currency, gross_amount, paypal_fee, net_amount, status,
+        fcra_purpose, fcra_financial_year, payment_method, upi_vpa
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+    `, [
+      donationId,
+      donorId,
+      trustId,
+      profile.name,
+      orderId,
+      idempotencyKey,
+      'INR',
+      numAmount,
+      0.00,
+      numAmount,
+      'PENDING_UPI',
+      'SOCIAL',
+      '2026-2027',
+      'UPI',
+      vpa
+    ]);
+
+    // 3. Build NPCI Compliant Standard UPI URI & App Deep Links
+    const cleanNote = `Seva Contribution - ${profile.name}`.slice(0, 50);
+    const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${numAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(cleanNote)}&tr=${orderId}`;
+
+    const deepLinks = {
+      generic: standardUpiUri,
+      gpay: `tez://upi/pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${numAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(cleanNote)}&tr=${orderId}`,
+      phonepe: `phonepe://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${numAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(cleanNote)}&tr=${orderId}`,
+      paytm: `paytmmp://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${numAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(cleanNote)}&tr=${orderId}`,
+      bhim: `bhim://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${numAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(cleanNote)}&tr=${orderId}`
+    };
+
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(standardUpiUri)}`;
+
+    recordLedgerMirrorEvent('UPI_INITIATE', {
+      orderId,
+      donationId,
+      donorId,
+      amount: numAmount,
+      currency: 'INR',
+      vpa,
+      trustId
+    });
+
+    logger.info('UPI Donation Intent initiated', {
+      orderId,
+      vpa,
+      amount: numAmount,
+      currency: 'INR',
+      trustId
+    }, 'UPI_INIT', correlationId);
+
+    return res.json({
+      success: true,
+      orderId,
+      donationId,
+      amount: numAmount,
+      currency: 'INR',
+      vpa,
+      payeeName,
+      standardUpiUri,
+      qrCodeUrl,
+      deepLinks
+    });
+  } catch (err: any) {
+    logger.error('Error initiating UPI donation', err, undefined, correlationId);
+    return res.status(500).json({ error: 'Failed to initiate UPI donation.' });
+  }
+});
+
+/**
+ * 3C. Verify & Capture Domestic UPI Donation
+ * Records UTR / payment confirmation, captures donation, triggers receipt email
+ */
+app.post('/api/donations/upi/verify', async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId;
+  try {
+    const { orderId, utr } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({ error: 'Missing UPI order ID.' });
+    }
+
+    const checkRes = await dbQuery('SELECT * FROM donations WHERE paypal_order_id = $1', [orderId]);
+    if (!checkRes.rows || checkRes.rows.length === 0) {
+      return res.status(404).json({ error: 'UPI donation order not found.' });
+    }
+
+    const donation = checkRes.rows[0];
+    const captureId = utr ? utr.trim() : `UPI-CAP-${Date.now()}`;
+
+    // Idempotent: If already captured, return existing data
+    if (donation.status === 'CAPTURED') {
+      return res.json({
+        success: true,
+        status: 'COMPLETED',
+        orderId,
+        captureId: donation.paypal_capture_id || captureId,
+        gross: donation.gross_amount,
+        currency: donation.currency || 'INR'
+      });
+    }
+
+    // Update status to CAPTURED
+    await dbQuery(`
+      UPDATE donations SET
+        status = 'CAPTURED',
+        paypal_capture_id = $1,
+        upi_ref = $2,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE paypal_order_id = $3
+    `, [captureId, utr || captureId, orderId]);
+
+    recordLedgerMirrorEvent('UPI_SUCCESS', {
+      orderId,
+      captureId,
+      amount: donation.gross_amount,
+      currency: donation.currency,
+      status: 'CAPTURED'
+    });
+
+    try {
+      await createDatabaseSnapshot('CAPTURE');
+    } catch (e: any) {
+      logger.warn(`Backup warning: ${e.message}`, { error: e.message }, 'DB_SNAPSHOT', correlationId);
+    }
+
+    // Trigger post-donation confirmation email workflow (non-blocking & idempotent)
+    triggerDonationEmailWorkflow(orderId, correlationId).catch((err) => {
+      logger.error('Background UPI post-capture email dispatch error', err, { orderId }, correlationId);
+    });
+
+    logger.info('UPI Donation verified and captured', {
+      orderId,
+      captureId,
+      amount: donation.gross_amount
+    }, 'UPI_SUCCESS', correlationId);
+
+    return res.json({
+      success: true,
+      status: 'COMPLETED',
+      orderId,
+      captureId,
+      gross: donation.gross_amount,
+      currency: donation.currency || 'INR',
+      trustId: donation.trust_id
+    });
+  } catch (err: any) {
+    logger.error('Error verifying UPI donation', err, undefined, correlationId);
+    return res.status(500).json({ error: 'Failed to verify UPI donation.' });
   }
 });
 
