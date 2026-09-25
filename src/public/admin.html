@@ -612,7 +612,7 @@
     <div class="brand-title">
       <div style="font-size: 0.72rem; color: #fbbf24; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 2px;">॥ सेवा परमो धर्मः ॥ • SACRED STEWARDSHIP SUITE</div>
       <h1>Trustee Compliance & Administration Workspace</h1>
-      <p>Managing Trustee: <strong>Authorized Managing Trustee</strong> | FCRA & MHA Form FC-4 Hub</p>
+      <p>Managing Trustee: <strong>Sri Pratap Maharaj</strong> | Divya Yoga Mandali & The Art Of Relaxation</p>
     </div>
   </div>
 
@@ -788,8 +788,8 @@
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
           <div class="filter-tabs">
             <button class="filter-tab active" onclick="filterLedger('all', this)">All Entities</button>
-            <button class="filter-tab" onclick="filterLedger('divya', this)">Primary Trust (Primary Bank)</button>
-            <button class="filter-tab" onclick="filterLedger('relaxation', this)">Secondary Project (Partner Bank)</button>
+            <button class="filter-tab" onclick="filterLedger('divya', this)">Divya Yoga Mandali (SBI Boduppal)</button>
+            <button class="filter-tab" onclick="filterLedger('relaxation', this)">The Art Of Relaxation (Karur Vysya Bank)</button>
           </div>
           <a href="/api/admin/fc4-export" class="btn btn-primary" id="btn-export-fc4">
             📄 Export Form FC-4 (CSV)
@@ -853,8 +853,8 @@
             Target Non-Profit Entity
           </label>
           <select id="sim-trust-select" style="width: 100%; padding: 10px; background: rgba(15,23,42,0.9); border: 1px solid var(--card-border); border-radius: 8px; color: white; font-family: inherit;">
-            <option value="divya">Primary Non-Profit Trust (National Bank A/c ...XXXX)</option>
-            <option value="relaxation">Secondary Project Initiative (Commercial Bank A/c ...YYYY)</option>
+            <option value="divya">Divya Yoga Mandali Charitable Trust (SBI A/c ...4651)</option>
+            <option value="relaxation">The Art Of Relaxation (Karur Vysya Bank A/c ...7999)</option>
           </select>
         </div>
 
@@ -1275,7 +1275,7 @@
     tbody.innerHTML = filtered.map(d => {
       const isDivya = d.trust_id === 'divya';
       const trustClass = isDivya ? 'trust-divya' : 'trust-relaxation';
-      const trustShort = isDivya ? 'Primary Trust (Primary Bank)' : 'Secondary Project (Partner Bank)';
+      const trustShort = isDivya ? 'Divya Yoga Mandali (SBI)' : 'The Art Of Relaxation (KVB)';
       const isDomesticInr = (d.currency || '').toUpperCase() === 'INR' || (d.payment_method || '').toUpperCase() === 'UPI';
       const gross = parseFloat(d.gross_amount) || 0;
       const fee = parseFloat(d.paypal_fee) || 0;
