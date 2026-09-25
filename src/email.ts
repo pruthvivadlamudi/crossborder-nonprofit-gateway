@@ -321,8 +321,9 @@ export async function sendDonationConfirmationEmail(
   data: DonationEmailData,
   correlationId?: string
 ): Promise<EmailDispatchResult> {
-  const fromEmail = process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'onboarding@resend.dev';
-  const fromName = process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva';
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'onboarding@resend.dev').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva').trim().replace(/^['"]|['"]$/g, '');
   const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
   const amountStr = isUpi
     ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
@@ -331,9 +332,10 @@ export async function sendDonationConfirmationEmail(
   const htmlContent = renderDonationEmailHtml(data);
 
   // 1. Resend Provider (Recommended: 3,000 free emails/month via simple REST)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
   if (resendApiKey && !resendApiKey.includes('your_')) {
-    logger.info(`Dispatching donation email via Resend to ${data.donorEmail}`, { orderId: data.paypalOrderId, provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    logger.info(`Dispatching donation email via Resend to ${data.donorEmail} (Key length: ${resendApiKey.length}, prefix: ${resendApiKey.slice(0, 6)}...)`, { orderId: data.paypalOrderId, provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
