@@ -321,8 +321,8 @@ export async function sendDonationConfirmationEmail(
   data: DonationEmailData,
   correlationId?: string
 ): Promise<EmailDispatchResult> {
-  const fromEmail = process.env.EMAIL_FROM || process.env.RESEND_FROM || 'donations@yourtrust.org';
-  const fromName = data.trustName || 'Non-Profit Charitable Trust';
+  const fromEmail = process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'onboarding@resend.dev';
+  const fromName = process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva';
   const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
   const amountStr = isUpi
     ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
