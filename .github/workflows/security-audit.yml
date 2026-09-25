@@ -1,0 +1,35 @@
+name: Security Audit & Automated Vulnerability Scan
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run every Monday morning at 05:00 UTC (10:30 AM IST)
+    - cron: '0 5 * * 1'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab anytime
+
+jobs:
+  security-scan:
+    name: Dependency Vulnerability Audit & Build Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Security Audit
+        run: npm audit --audit-level=high
+
+      - name: Verify TypeScript Production Build
+        run: npm run build
