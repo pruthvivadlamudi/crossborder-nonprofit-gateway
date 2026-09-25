@@ -178,17 +178,24 @@ export async function dbQuery(sql: string, params: any[] = []): Promise<{ rows: 
   }
 
   if (sqliteDb) {
-    // Convert PostgreSQL style parameters $1, $2 to SQLite ?
-    let sqliteSql = sql.replace(/\$(\d+)/g, '?');
+    // Convert PostgreSQL style parameters $1, $2 to SQLite ? with correct parameter mapping
+    const mappedParams: any[] = [];
+    let sqliteSql = sql.replace(/\$(\d+)/g, (_match, num) => {
+      const idx = parseInt(num, 10) - 1;
+      mappedParams.push(params[idx]);
+      return '?';
+    });
 
     // Replace NOW() with CURRENT_TIMESTAMP for SQLite compatibility
     sqliteSql = sqliteSql.replace(/NOW\(\)/gi, 'CURRENT_TIMESTAMP');
 
+    const effectiveParams = mappedParams.length > 0 ? mappedParams : params;
+
     if (sqliteSql.trim().toUpperCase().startsWith('SELECT')) {
-      const rows = await sqliteDb.all(sqliteSql, params);
+      const rows = await sqliteDb.all(sqliteSql, effectiveParams);
       return { rows: rows || [] };
     } else {
-      const result = await sqliteDb.run(sqliteSql, params);
+      const result = await sqliteDb.run(sqliteSql, effectiveParams);
       return { rows: [{ id: result.lastID }] };
     }
   }
