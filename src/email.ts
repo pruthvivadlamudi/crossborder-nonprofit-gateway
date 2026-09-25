@@ -1,5 +1,6 @@
+import crypto from 'crypto';
 import fetch from 'node-fetch';
-import { v4 as uuidv4 } from 'uuid';
+const uuidv4 = () => crypto.randomUUID();
 import { logger } from './logger';
 import { dbQuery } from './db';
 
