@@ -161,6 +161,11 @@ function adminAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+// Health check endpoint for cloud platforms (Render/Koyeb) and UptimeRobot monitoring
+app.get('/api/health', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), service: 'nonprofit-gateway' });
+});
+
 // Explicit route handlers for donor portal and trustee dashboard
 app.get('/', (req: Request, res: Response) => {
   res.sendFile(path.join(publicDir, 'index.html'));
