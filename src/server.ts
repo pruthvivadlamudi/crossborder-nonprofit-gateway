@@ -1220,6 +1220,17 @@ app.get('/api/admin/verify-session', adminAuthMiddleware, (req: Request, res: Re
 });
 
 /**
+ * 6B. Trustee Admin Logout (Session Termination)
+ */
+app.post('/api/admin/logout', (req: Request, res: Response) => {
+  logger.info('Trustee admin session terminated', { ip: req.ip }, 'ADMIN_LOGOUT', (req as any).correlationId);
+  return res.json({
+    success: true,
+    message: 'Admin session terminated securely.'
+  });
+});
+
+/**
  * 7. Trustee Dashboard Stats (Protected)
  */
 app.get('/api/admin/stats', adminAuthMiddleware, async (req: Request, res: Response) => {
