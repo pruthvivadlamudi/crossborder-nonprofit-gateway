@@ -1161,6 +1161,7 @@
   let chartTrustSplit = null;
   let chartCountries = null;
   let chartFcraCategory = null;
+  let pollInterval = null;
   // Explicit Global Scope Bindings
   window.handleAdminLogin = handleAdminLogin;
   window.switchWorkspaceTab = switchWorkspaceTab;
@@ -1264,31 +1265,44 @@
   async function handleLogout() {
     try {
       if (adminToken) {
-        await fetch('/api/admin/logout', {
+        fetch('/api/admin/logout', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${adminToken}`
           }
-        });
+        }).catch(() => {});
       }
     } catch (e) {
       console.warn('Logout notification error:', e);
     }
-    localStorage.removeItem('fcra_admin_token');
-    localStorage.removeItem('trustee_token');
-    sessionStorage.clear();
+
+    try {
+      localStorage.removeItem('fcra_admin_token');
+      localStorage.removeItem('trustee_token');
+      sessionStorage.clear();
+    } catch (_) {}
     adminToken = '';
-    if (pollInterval) clearInterval(pollInterval);
-    if (chartTimeline) { chartTimeline.destroy(); chartTimeline = null; }
-    if (chartTrustSplit) { chartTrustSplit.destroy(); chartTrustSplit = null; }
-    if (chartCountries) { chartCountries.destroy(); chartCountries = null; }
-    if (chartFcraCategory) { chartFcraCategory.destroy(); chartFcraCategory = null; }
+
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    if (chartTimeline) { try { chartTimeline.destroy(); } catch (_) {} chartTimeline = null; }
+    if (chartTrustSplit) { try { chartTrustSplit.destroy(); } catch (_) {} chartTrustSplit = null; }
+    if (chartCountries) { try { chartCountries.destroy(); } catch (_) {} chartCountries = null; }
+    if (chartFcraCategory) { try { chartFcraCategory.destroy(); } catch (_) {} chartFcraCategory = null; }
+
     const pwdInput = document.getElementById('auth-password');
     if (pwdInput) pwdInput.value = '';
     const errElem = document.getElementById('auth-error');
     if (errElem) { errElem.textContent = ''; errElem.style.display = 'none'; }
+
+    // Instantly display the Auth Gate shield
     showAuthGate();
+
+    // Cleanly refresh page to reset all in-memory tables, scripts, and views
+    window.location.replace('/admin');
   }
 
   // Workspace Dual/Triple Mode Switching
