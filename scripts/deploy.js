@@ -36,11 +36,10 @@ async function deploy() {
 
     // 1. Build Verification
     console.log('\n🔨 [1/3] Verifying TypeScript build & asset compilation...');
-    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const buildResult = spawnSync(npmCmd, ['run', 'build'], {
+    const isWin = process.platform === 'win32';
+    const buildResult = spawnSync(isWin ? 'cmd.exe' : 'npm', isWin ? ['/c', 'npm', 'run', 'build'] : ['run', 'build'], {
       cwd: path.resolve(__dirname, '..'),
-      stdio: 'inherit',
-      shell: true
+      stdio: 'inherit'
     });
 
     if (buildResult.status !== 0) {

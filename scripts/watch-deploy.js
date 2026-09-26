@@ -43,10 +43,9 @@ async function triggerAutoDeploy() {
 
     // 1. Verify build
     console.log('🔨 Testing build compilation...');
-    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    const build = spawnSync(npmCmd, ['run', 'build'], {
+    const isWin = process.platform === 'win32';
+    const build = spawnSync(isWin ? 'cmd.exe' : 'npm', isWin ? ['/c', 'npm', 'run', 'build'] : ['run', 'build'], {
       cwd: path.resolve(__dirname, '..'),
-      shell: true,
       encoding: 'utf8'
     });
 
