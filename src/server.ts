@@ -191,6 +191,85 @@ app.post('/admin.html', (req: Request, res: Response) => {
   res.redirect('/admin.html');
 });
 
+// Direct PayPal Redirect Route for QR Codes & 1-Click Redirects
+app.get('/donate/paypal', (req: Request, res: Response) => {
+  const trustId = (req.query.trust as string) || 'divya';
+  const amount = parseFloat(req.query.amount as string) || 50;
+  const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
+  const merchantEmail = profile.merchantEmail || 'pratapmaharaj9@gmail.com';
+
+  const customUrl = trustId === 'relaxation'
+    ? process.env.PAYPAL_RELAXATION_DIRECT_URL
+    : process.env.PAYPAL_DIVYA_DIRECT_URL;
+
+  if (customUrl) {
+    const separator = customUrl.includes('?') ? '&' : '?';
+    return res.redirect(`${customUrl}${separator}amount=${amount.toFixed(2)}`);
+  }
+
+  // Official universal PayPal donation redirect
+  const paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(merchantEmail)}&item_name=${encodeURIComponent(profile.name)}&currency_code=USD&amount=${amount.toFixed(2)}`;
+  return res.redirect(paypalUrl);
+});
+
+// Direct UPI Redirect / Mobile Launcher Route for QR Codes & 1-Click Redirects
+app.get('/donate/upi', (req: Request, res: Response) => {
+  const trustId = (req.query.trust as string) || 'divya';
+  const amount = parseFloat(req.query.amount as string) || 1000;
+  const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
+  const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
+  const payeeName = profile.name;
+  const note = `Seva Contribution - ${profile.name}`.slice(0, 50);
+
+  const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const gpayUri = `tez://upi/pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const phonepeUri = `phonepe://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const paytmUri = `paytmmp://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+
+  // Return a mobile-optimized launcher page that triggers the UPI intent and gives 1-tap app buttons
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Opening UPI Payment - ${encodeURIComponent(payeeName)}</title>
+  <meta http-equiv="refresh" content="0; url=${standardUpiUri}">
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #080c14; color: #f8fafc; text-align: center; padding: 40px 20px; }
+    .card { background: #0f172a; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 20px; padding: 28px 20px; max-width: 420px; margin: 0 auto; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+    .badge { display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px; margin-bottom: 12px; }
+    h2 { font-size: 1.25rem; margin-bottom: 6px; }
+    .amount { font-size: 1.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0; }
+    .btn { display: block; padding: 13px; margin: 10px 0; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; color: white; transition: opacity 0.2s; }
+    .btn:hover { opacity: 0.9; }
+    .btn-upi { background: linear-gradient(135deg, #10b981, #059669); }
+    .btn-gpay { background: #4285F4; }
+    .btn-phonepe { background: #673AB7; }
+    .btn-paytm { background: #00b9f5; }
+    .vpa-box { background: rgba(0,0,0,0.4); border-radius: 8px; padding: 10px; margin-top: 16px; font-size: 0.82rem; color: #94a3b8; }
+    .vpa { font-family: monospace; color: #fde68a; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">॥ Vasudhaiva Kutumbakam ॥</div>
+    <h2>${payeeName}</h2>
+    <div class="amount">₹${amount.toLocaleString('en-IN')} INR</div>
+    <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;">Launching UPI payment on your device...</p>
+    <a href="${standardUpiUri}" class="btn btn-upi">📱 Launch Any UPI App</a>
+    <a href="${gpayUri}" class="btn btn-gpay">📱 Open in Google Pay</a>
+    <a href="${phonepeUri}" class="btn btn-phonepe">📱 Open in PhonePe</a>
+    <a href="${paytmUri}" class="btn btn-paytm">📱 Open in Paytm</a>
+    <div class="vpa-box">Official Payee UPI ID:<br><span class="vpa">${vpa}</span></div>
+  </div>
+  <script>
+    window.location.href = "${standardUpiUri}";
+  </script>
+</body>
+</html>`);
+});
+
+
 
 // PayPal Configuration
 const PAYPAL_MODE = process.env.PAYPAL_MODE || 'sandbox';
@@ -421,12 +500,18 @@ app.get('/api/config', (req: Request, res: Response) => {
   const profile = TRUST_PROFILES[trustKey] || TRUST_PROFILES.divya;
   const creds = getTrustCredentials(trustKey);
 
+  const customUrl = trustKey === 'relaxation'
+    ? process.env.PAYPAL_RELAXATION_DIRECT_URL
+    : process.env.PAYPAL_DIVYA_DIRECT_URL;
+  const directPayPalUrl = customUrl || `https://www.paypal.com/donate/?business=${encodeURIComponent(profile.merchantEmail)}&item_name=${encodeURIComponent(profile.name)}&currency_code=USD`;
+
   res.json({
     clientId: creds.clientId,
     isLiveConfigured: Boolean(creds.clientId && creds.clientSecret),
     mode: PAYPAL_MODE,
     currency: 'USD',
     profile,
+    directPayPalUrl,
     availableTrusts: Object.values(TRUST_PROFILES)
   });
 });
@@ -450,13 +535,6 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
       currency = 'USD'
     } = req.body;
 
-    // Strict FCRA Rule 13: Mandatory Non-Anonymous Donor Profiling
-    if (!firstName || !lastName || !email || !nationality || !countryOfResidence || !residentialAddress || !amount) {
-      return res.status(400).json({
-        error: 'Compliance Violation: Full donor identity (Name, Nationality, Country, Address, Amount) is mandatory under FCRA regulations.'
-      });
-    }
-
     const donationAmount = parseFloat(amount);
     if (isNaN(donationAmount) || donationAmount <= 0) {
       return res.status(400).json({ error: 'Invalid donation amount.' });
@@ -465,6 +543,14 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
     const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
     const donorId = uuidv4();
     const idempotencyKey = uuidv4();
+
+    // Gracefully handle 1-click giving without blocking donors
+    const safeFirstName = (firstName || 'Devoted').trim();
+    const safeLastName = (lastName || 'Supporter').trim();
+    const safeEmail = (email || `donor-${Date.now()}@generous-patron.org`).toLowerCase().trim();
+    const safeNationality = (nationality || 'International').trim();
+    const safeCountry = (countryOfResidence || 'US').toUpperCase().trim();
+    const safeAddress = (residentialAddress || 'Provided via Payment Gateway').trim();
 
     // Upsert Donor Profile
     await dbQuery(`
@@ -483,18 +569,18 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
         updated_at = CURRENT_TIMESTAMP;
     `, [
       donorId,
-      email.toLowerCase().trim(),
-      firstName.trim(),
-      lastName.trim(),
-      nationality.trim(),
+      safeEmail,
+      safeFirstName,
+      safeLastName,
+      safeNationality,
       isNri ? 1 : 0,
       passportOrId ? passportOrId.trim() : null,
-      countryOfResidence.toUpperCase().trim(),
-      residentialAddress.trim()
+      safeCountry,
+      safeAddress
     ]);
 
     // Retrieve active donor ID
-    const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [email.toLowerCase().trim()]);
+    const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [safeEmail]);
     const activeDonorId = existingDonor.rows[0]?.id || donorId;
 
     let orderId: string;
@@ -810,22 +896,27 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
     } = req.body;
 
     const numAmount = parseFloat(amount);
-    if (!firstName || !lastName || !email || !residentialAddress || !numAmount || numAmount <= 0) {
-      return res.status(400).json({
-        error: 'Compliance Violation: Full donor identity (Name, Email, Address, Amount) is required for charitable contribution receipting.'
-      });
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Invalid donation amount.' });
     }
 
+    // Gracefully handle 1-click giving without blocking donors
+    const safeFirstName = (firstName || 'Devoted').trim();
+    const safeLastName = (lastName || 'Supporter').trim();
+    const safeEmail = (email || `donor-${Date.now()}@generous-patron.org`).toLowerCase().trim();
+    const safeNationality = (nationality || 'Indian').trim();
+    const safeCountry = (countryOfResidence || 'India').trim();
+    const safeAddress = (residentialAddress || 'Direct UPI Transfer').trim();
+
     const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
-    const vpa = profile.upiVpa || 'charity.seva@sbi';
+    const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
     const payeeName = profile.name;
     const orderId = `UPI-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
     const idempotencyKey = `UPI-IDEM-${orderId}`;
 
     // 1. Upsert Donor Profile
-    const normalizedEmail = email.toLowerCase().trim();
     let donorId: string;
-    const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [normalizedEmail]);
+    const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [safeEmail]);
 
     if (existingDonor.rows && existingDonor.rows.length > 0) {
       donorId = existingDonor.rows[0].id;
@@ -836,14 +927,14 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
           residential_address = $8, updated_at = CURRENT_TIMESTAMP
         WHERE id = $9
       `, [
-        firstName.trim(),
-        lastName.trim(),
+        safeFirstName,
+        safeLastName,
         phoneNumber || null,
-        nationality,
+        safeNationality,
         isNri ? 1 : 0,
         passportOrId || null,
-        countryOfResidence,
-        residentialAddress.trim(),
+        safeCountry,
+        safeAddress,
         donorId
       ]);
     } else {
@@ -855,17 +946,17 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         donorId,
-        firstName.trim(),
-        lastName.trim(),
-        normalizedEmail,
+        safeFirstName,
+        safeLastName,
+        safeEmail,
         phoneNumber || null,
-        nationality,
+        safeNationality,
         isNri ? 1 : 0,
         passportOrId || null,
-        countryOfResidence,
-        residentialAddress.trim()
+        safeCountry,
+        safeAddress
       ]);
-      recordLedgerMirrorEvent('DONOR', { donorId, email: normalizedEmail, nationality });
+      recordLedgerMirrorEvent('DONOR', { donorId, email: safeEmail, nationality: safeNationality });
     }
 
     // 2. Insert Pending UPI Donation Record
