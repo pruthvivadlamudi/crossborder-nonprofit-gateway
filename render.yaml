@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: dymct-aor-gateway
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeployTrigger: commit
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000

@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc && node -e \"require('fs').cpSync('src/public', 'dist/public', {recursive: true})\"",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "deploy": "node scripts/deploy.js",
+    "deploy:watch": "node scripts/watch-deploy.js",
+    "sync": "node scripts/watch-deploy.js"
   },
   "engines": {
     "node": "20.x"
