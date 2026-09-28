@@ -1,12 +1,21 @@
 import request from 'supertest';
 import { app } from '../../src/server';
-import { initDatabase, dbQuery } from '../../src/db';
+import { initDatabase, dbQuery, setAdminPasswordResetToken, updateAdminPasswordAndClearToken, getAdminByEmail } from '../../src/db';
+import { generatePasswordResetToken, hashPassword } from '../../src/security';
 
 describe('API Security, Validation & Endpoint Integration Suite', () => {
   let adminToken: string = '';
 
   beforeAll(async () => {
     await initDatabase();
+
+    // Ensure test admin password is reset to 'Trustee@2026!' for test idempotency
+    const initialHash = await hashPassword('Trustee@2026!');
+    await dbQuery(`
+      UPDATE admin_users 
+      SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL 
+      WHERE LOWER(email) = 'pratapmaharaj9@gmail.com'
+    `, [initialHash]);
 
     // Authenticate to obtain test admin token
     const loginRes = await request(app)
@@ -212,6 +221,107 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    });
+  });
+
+  describe('Admin Forgot Password & Password Reset Integration Suite', () => {
+    let validRawToken = '';
+    const adminEmail = 'pratapmaharaj9@gmail.com';
+    const newPassword = 'NewSecureAdmin@2026!';
+
+    it('POST /api/admin/forgot-password should return generic success for registered email', async () => {
+      const res = await request(app)
+        .post('/api/admin/forgot-password')
+        .send({ email: adminEmail });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('If an administrator account with that email address exists');
+    });
+
+    it('POST /api/admin/forgot-password should return identical response for non-existent email (anti-enumeration)', async () => {
+      const res = await request(app)
+        .post('/api/admin/forgot-password')
+        .send({ email: 'nonexistent-random-user@unknown.org' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toContain('If an administrator account with that email address exists');
+    });
+
+    it('GET /api/admin/verify-reset-token should reject invalid or forged token', async () => {
+      const res = await request(app)
+        .get('/api/admin/verify-reset-token')
+        .query({ token: 'invalid-forged-token-1234567890abcdef' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.valid).toBe(false);
+      expect(res.body.error).toContain('Invalid or expired');
+    });
+
+    it('POST /api/admin/reset-password should reject weak passwords', async () => {
+      const res = await request(app)
+        .post('/api/admin/reset-password')
+        .send({ token: 'dummy-token', newPassword: 'weak' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('at least 8 characters');
+    });
+
+    it('should complete full password reset lifecycle and invalidate token', async () => {
+      // 1. Generate a valid token package and attach to admin user
+      const pkg = generatePasswordResetToken(20);
+      validRawToken = pkg.rawToken;
+      await setAdminPasswordResetToken(adminEmail, pkg.hashedToken, pkg.expiresAt);
+
+      // 2. Verify token endpoint should now return valid: true with masked email
+      const verifyRes = await request(app)
+        .get('/api/admin/verify-reset-token')
+        .query({ token: validRawToken });
+
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.valid).toBe(true);
+      expect(verifyRes.body.email).toBe('p***9@gmail.com');
+
+      // 3. Execute password reset
+      const resetRes = await request(app)
+        .post('/api/admin/reset-password')
+        .send({ token: validRawToken, newPassword });
+
+      expect(resetRes.status).toBe(200);
+      expect(resetRes.body.success).toBe(true);
+      expect(resetRes.body.message).toContain('updated securely');
+
+      // 4. Token MUST immediately be invalidated (Anti-Replay check)
+      const replayRes = await request(app)
+        .post('/api/admin/reset-password')
+        .send({ token: validRawToken, newPassword: 'AnotherPassword@2026!' });
+
+      expect(replayRes.status).toBe(400);
+      expect(replayRes.body.error).toContain('invalid, expired, or has already been used');
+
+      // 5. Authenticate with newly set password
+      const newLoginRes = await request(app)
+        .post('/api/admin/login')
+        .send({ email: adminEmail, password: newPassword });
+
+      expect(newLoginRes.status).toBe(200);
+      expect(newLoginRes.body.success).toBe(true);
+      expect(newLoginRes.body.token).toBeDefined();
+
+      // 6. Old password should now be rejected
+      const oldLoginRes = await request(app)
+        .post('/api/admin/login')
+        .send({ email: adminEmail, password: 'WrongOldPassword@2026!' });
+
+      expect(oldLoginRes.status).toBe(401);
+
+      // 7. Restore original password for state clean-up
+      const restoreHash = await hashPassword('Trustee@2026!');
+      const adminRecord = await getAdminByEmail(adminEmail);
+      if (adminRecord) {
+        await updateAdminPasswordAndClearToken(adminRecord.id, restoreHash);
+      }
     });
   });
 });

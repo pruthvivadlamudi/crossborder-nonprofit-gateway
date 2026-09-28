@@ -12,13 +12,19 @@ import {
   dbQuery,
   recordLedgerMirrorEvent,
   createDatabaseSnapshot,
-  getDatabaseStatus
+  getDatabaseStatus,
+  getAdminByEmail,
+  getPrimaryAdmin,
+  setAdminPasswordResetToken,
+  getAdminByValidResetToken,
+  updateAdminPasswordAndClearToken
 } from './db';
 import { logger, requestLoggingMiddleware } from './logger';
 import {
   sendDonationConfirmationEmail,
   DonationEmailData,
-  renderDonationEmailHtml
+  renderDonationEmailHtml,
+  sendPasswordResetEmail
 } from './email';
 import {
   timingSafeStringCompare,
@@ -27,7 +33,13 @@ import {
   encryptPII,
   decryptPII,
   encryptDonorRecord,
-  decryptDonorRecord
+  decryptDonorRecord,
+  verifyPassword,
+  hashPassword,
+  generatePasswordResetToken,
+  hashResetToken,
+  validatePasswordStrength,
+  maskEmail
 } from './security';
 
 dotenv.config();
@@ -124,6 +136,26 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
   message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' }
+});
+
+// Stricter Rate Limiter for Password Reset Requests (Anti-Spam / Enumeration Protection)
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: { error: 'Too many password reset requests from this network. Please try again after 15 minutes.' }
+});
+
+// Stricter Rate Limiter for Password Reset Submissions (Anti-Brute Force / Token Guessing)
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
+  message: { error: 'Too many password reset attempts. Please try again after 15 minutes.' }
 });
 
 app.use('/api/', apiLimiter);
@@ -1242,27 +1274,42 @@ app.post('/api/webhooks/paypal', async (req: AuthenticatedRequest, res: Response
 // ============================================================================
 
 /**
- * 5. Trustee Admin Login
+ * 5. Trustee Admin Login (Database-backed with bcrypt & legacy fallback)
  */
-app.post('/api/admin/login', authLimiter, (req: Request, res: Response) => {
-  const { password } = req.body;
+app.post('/api/admin/login', authLimiter, async (req: Request, res: Response) => {
+  const { email, password } = req.body;
   if (!password) {
     return res.status(400).json({ error: 'Passcode is required.' });
   }
 
-  // Constant-time comparison using SHA-256 digests to prevent timing attacks
-  const isMatch = timingSafeStringCompare(password, ADMIN_PASSWORD);
+  let adminUser = null;
+  if (email && typeof email === 'string' && email.trim().length > 0) {
+    adminUser = await getAdminByEmail(email.trim());
+  } else {
+    // If no email provided, get the primary seeded admin for single-tenant Trustee convenience
+    adminUser = await getPrimaryAdmin();
+  }
+
+  let isMatch = false;
+  if (adminUser && adminUser.password_hash) {
+    // Strong cryptographic verification using bcrypt
+    isMatch = await verifyPassword(password, adminUser.password_hash);
+  } else {
+    // Legacy fallback comparison to ADMIN_PASSWORD in environment
+    isMatch = timingSafeStringCompare(password, ADMIN_PASSWORD);
+  }
 
   if (!isMatch) {
-    logger.warn('Failed admin login attempt', { ip: req.ip }, 'ADMIN_AUTH_FAILED', (req as any).correlationId);
-    return res.status(401).json({ error: 'Invalid Trustee Passcode. Access denied.' });
+    logger.warn('Failed admin login attempt', { ip: req.ip, email: email || 'primary_admin' }, 'ADMIN_AUTH_FAILED', (req as any).correlationId);
+    return res.status(401).json({ error: 'Invalid Trustee credentials. Access denied.' });
   }
 
   const token = generateAdminToken();
-  logger.info('Trustee admin authenticated successfully', undefined, 'ADMIN_AUTH_SUCCESS', (req as any).correlationId);
+  logger.info('Trustee admin authenticated successfully', { email: adminUser?.email || 'admin' }, 'ADMIN_AUTH_SUCCESS', (req as any).correlationId);
   return res.json({
     success: true,
     token,
+    user: adminUser ? { email: adminUser.email, fullName: adminUser.full_name, role: adminUser.role } : undefined,
     message: 'Authentication successful. Trustee console unlocked.'
   });
 });
@@ -1282,6 +1329,135 @@ app.post('/api/admin/logout', (req: Request, res: Response) => {
   return res.json({
     success: true,
     message: 'Admin session terminated securely.'
+  });
+});
+
+/**
+ * 6C. Forgot Password Request
+ * Initiates secure password reset workflow: generates cryptographically secure 256-bit token,
+ * stores SHA-256 digest in database with strict 20-minute expiry window, dispatches branded transactional email,
+ * and always returns a generic 200 response to prevent user enumeration attacks.
+ */
+app.post('/api/admin/forgot-password', forgotPasswordLimiter, async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || crypto.randomUUID();
+  const { email } = req.body;
+
+  // Generic response to thwart email enumeration and username harvesting
+  const genericSuccessMessage = 'If an administrator account with that email address exists, secure password reset instructions have been dispatched.';
+
+  if (!email || typeof email !== 'string' || !email.includes('@')) {
+    return res.status(200).json({
+      success: true,
+      message: genericSuccessMessage
+    });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  logger.info('Password reset requested', { email: maskEmail(cleanEmail) }, 'FORGOT_PASSWORD_REQUEST', correlationId);
+
+  // Check if admin user exists in database
+  const admin = await getAdminByEmail(cleanEmail);
+
+  if (admin) {
+    // Generate secure 256-bit token with 20-minute expiration window
+    const { rawToken, hashedToken, expiresAt } = generatePasswordResetToken(20);
+
+    // Save hashed token and expiry in database (anti-tamper / leak-resilient)
+    await setAdminPasswordResetToken(admin.email, hashedToken, expiresAt);
+
+    // Determine base URL for reset link
+    const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:10000';
+    const baseUrl = `${protocol}://${host}`;
+    const resetLink = `${baseUrl}/admin.html#reset-token=${rawToken}`;
+
+    // Dispatch branded transactional email asynchronously
+    sendPasswordResetEmail(admin.email, admin.full_name, resetLink, correlationId).catch(err => {
+      logger.error('Failed to dispatch password reset email', err, { email: admin.email }, correlationId);
+    });
+  } else {
+    logger.info('Password reset requested for unregistered email (enumeration defended)', { email: maskEmail(cleanEmail) }, 'FORGOT_PASSWORD_ENUM_DEFENSE', correlationId);
+  }
+
+  // Always return identical generic success response
+  return res.status(200).json({
+    success: true,
+    message: genericSuccessMessage
+  });
+});
+
+/**
+ * 6D. Verify Password Reset Token
+ * Validates incoming token without resetting password, providing early UI feedback
+ */
+app.get('/api/admin/verify-reset-token', async (req: Request, res: Response) => {
+  const token = req.query.token as string;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ valid: false, error: 'Reset token is required.' });
+  }
+
+  const hashedToken = hashResetToken(token);
+  const admin = await getAdminByValidResetToken(hashedToken);
+
+  if (!admin) {
+    return res.status(400).json({
+      valid: false,
+      error: 'Invalid or expired password reset link. Please request a new reset link.'
+    });
+  }
+
+  return res.json({
+    valid: true,
+    email: maskEmail(admin.email),
+    fullName: admin.full_name
+  });
+});
+
+/**
+ * 6E. Password Reset Execution & Invalidation
+ * Validates incoming token against database, enforces password complexity rules,
+ * hashes new password with bcrypt, updates record, and immediately clears token (anti-replay).
+ */
+app.post('/api/admin/reset-password', resetPasswordLimiter, async (req: Request, res: Response) => {
+  const correlationId = (req as any).correlationId || crypto.randomUUID();
+  const { token, newPassword } = req.body;
+
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Reset token is required.' });
+  }
+
+  if (!newPassword || typeof newPassword !== 'string') {
+    return res.status(400).json({ error: 'New password is required.' });
+  }
+
+  // Validate strict password complexity rules
+  const validation = validatePasswordStrength(newPassword);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+
+  // Verify token against database
+  const hashedToken = hashResetToken(token);
+  const admin = await getAdminByValidResetToken(hashedToken);
+
+  if (!admin) {
+    logger.warn('Password reset attempted with invalid/expired token', undefined, 'RESET_TOKEN_INVALID', correlationId);
+    return res.status(400).json({
+      error: 'This password reset link is invalid, expired, or has already been used. Please request a new one.'
+    });
+  }
+
+  // Hash new password using bcrypt
+  const newHash = await hashPassword(newPassword);
+
+  // Update password and IMMEDIATELY clear reset_token and reset_token_expiry
+  await updateAdminPasswordAndClearToken(admin.id, newHash);
+
+  logger.info('Admin password reset successfully executed and token invalidated', { adminId: admin.id, email: maskEmail(admin.email) }, 'PASSWORD_RESET_SUCCESS', correlationId);
+
+  return res.status(200).json({
+    success: true,
+    message: 'Your Trustee password has been updated securely. You may now log in with your new credentials.'
   });
 });
 

@@ -495,3 +495,294 @@ async function logEmailDispatch(
     logger.warn(`Could not record email dispatch audit log: ${e.message}`, { error: e.message }, 'EMAIL_AUDIT');
   }
 }
+
+/**
+ * Dynamic Branded HTML Email Template for Password Reset
+ * Follows Divya Yoga Mandali & The Art Of Relaxation visual brand identity
+ */
+export function renderPasswordResetEmailHtml(
+  adminName: string,
+  resetLink: string,
+  expirationMinutes: number = 20
+): string {
+  const safeName = escapeHtml(adminName || 'Revered Trustee');
+  const safeLink = escapeHtml(resetLink);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trustee Passcode Reset Authorization - Divya Yoga Mandali</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0b111e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .mobile-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 32px 12px; background-color: #0b111e;">
+
+  <center>
+    <!-- Outer Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Sacred Header -->
+      <tr>
+        <td align="center" style="padding: 26px 20px; background-color: #080c14; border-bottom: 3px solid #d97706; border-radius: 12px 12px 0 0;">
+          <div style="color: #fbbf24; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">
+            ॥ सेवा परमो धर्मः ॥ • ADMINISTRATIVE COMPLIANCE & SECURITY
+          </div>
+          <h1 style="color: #ffffff; font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em;">
+            Divya Yoga Mandali & The Art Of Relaxation
+          </h1>
+          <div style="color: #94a3b8; font-size: 13px;">
+            Official Trustee Credentials & Access Management
+          </div>
+        </td>
+      </tr>
+
+      <!-- Main Body Card -->
+      <tr>
+        <td style="background-color: #ffffff; padding: 36px 30px; color: #1e293b;">
+          
+          <h2 style="color: #0f172a; font-size: 19px; font-weight: 700; margin: 0 0 14px;">
+            Trustee Passcode Reset Authorization
+          </h2>
+
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 20px;">
+            Namaste <strong>${safeName}</strong>,
+          </p>
+
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 24px;">
+            A request was initiated to reset your administrative passcode for the <strong>Trustee Compliance & Administration Workspace</strong>. Click the button below to establish a new secure passcode:
+          </p>
+
+          <!-- Security Expiration Notice Box -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 14px 18px;">
+                <div style="font-size: 13px; font-weight: 700; color: #92400e; margin-bottom: 4px;">
+                  ⏳ Time-Sensitive Security Token
+                </div>
+                <div style="font-size: 13px; color: #b45309; line-height: 1.5;">
+                  This single-use reset authorization is valid for strictly <strong>${expirationMinutes} minutes</strong>. Once used or expired, it cannot be reused.
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Action Button CTA -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td align="center">
+                <a href="${safeLink}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);">
+                  🔐 Set New Trustee Passcode
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Fallback Link -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 26px;">
+            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px;">
+              Direct Link Alternative:
+            </div>
+            <div style="font-size: 12px; color: #0284c7; word-break: break-all; line-height: 1.4;">
+              <a href="${safeLink}" target="_blank" style="color: #0284c7; text-decoration: underline;">
+                ${safeLink}
+              </a>
+            </div>
+          </div>
+
+          <!-- Anti-Tamper Safeguard -->
+          <p style="font-size: 12px; line-height: 1.6; color: #64748b; margin: 0; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            🛡️ <strong>Security Safeguard:</strong> If you did not initiate this reset request, you can safely disregard this message. Your administrative account remains fully secured, and no changes have been applied.
+          </p>
+
+        </td>
+      </tr>
+
+      <!-- Regulatory & Trust Footer -->
+      <tr>
+        <td style="background-color: #080c14; padding: 22px 24px; border-radius: 0 0 12px 12px; font-size: 11px; color: #94a3b8; line-height: 1.6; text-align: center;">
+          <p style="margin: 0 0 6px; color: #cbd5e1; font-weight: 600;">
+            Divya Yoga Mandali Charitable Trust (DYMCT) & The Art Of Relaxation (AOR)
+          </p>
+          <p style="margin: 0; color: #64748b;">
+            Managing Trustee: Sri Pratap Maharaj • Authorized FCRA Gateway
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </center>
+
+</body>
+</html>`;
+}
+
+/**
+ * Dispatch Password Reset Email via Multi-Provider Engine
+ * (Resend -> Brevo -> SendGrid -> Simulation)
+ */
+export async function sendPasswordResetEmail(
+  adminEmail: string,
+  adminName: string,
+  resetLink: string,
+  correlationId?: string
+): Promise<EmailDispatchResult> {
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'onboarding@resend.dev').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Compliance').trim().replace(/^['"]|['"]$/g, '');
+  const subject = `Urgent: Trustee Passcode Reset Authorization - Divya Yoga Mandali`;
+  const htmlContent = renderPasswordResetEmailHtml(adminName, resetLink, 20);
+
+  // 1. Resend Provider
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
+  if (resendApiKey && !resendApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [adminEmail],
+          subject,
+          html: htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id);
+      logger.info(`Password reset email delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'resend', messageId: responseBody.id };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via Resend', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 2. Brevo Provider
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: adminEmail, name: adminName }],
+          subject,
+          htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Brevo API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', responseBody.messageId);
+      logger.info(`Password reset email delivered via Brevo`, { messageId: responseBody.messageId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: responseBody.messageId };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via Brevo', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'brevo', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 3. SendGrid Provider
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
+  if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: adminEmail, name: adminName }] }],
+          from: { email: fromEmail, name: fromName },
+          subject,
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`SendGrid API returned ${res.status}: ${errText}`);
+      }
+
+      const msgId = `sg-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', msgId);
+      logger.info(`Password reset email delivered via SendGrid`, { messageId: msgId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: msgId };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via SendGrid', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 4. Simulation Mode
+  const simMessageId = `SIM-RESET-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  logger.info(`[SIMULATION MODE] Generated password reset email for ${adminEmail}`, {
+    adminEmail,
+    adminName,
+    resetLink,
+    simulatedMessageId: simMessageId
+  }, 'EMAIL_SIMULATION', correlationId);
+
+  await logResetEmailDispatch(adminEmail, 'simulation', 'SUCCESS', simMessageId);
+  return {
+    success: true,
+    provider: 'simulation',
+    messageId: simMessageId,
+    renderedHtml: htmlContent
+  };
+}
+
+async function logResetEmailDispatch(
+  email: string,
+  provider: string,
+  status: string,
+  messageId?: string,
+  errorMessage?: string
+): Promise<void> {
+  try {
+    await dbQuery(`
+      INSERT INTO email_dispatch_logs (
+        id, order_id, donor_email, provider, status, message_id, error_details
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      uuidv4(),
+      'PASSWORD_RESET',
+      email,
+      provider,
+      status,
+      messageId || null,
+      errorMessage || null
+    ]);
+  } catch (e: any) {
+    logger.warn(`Could not record password reset email dispatch log: ${e.message}`, { error: e.message }, 'EMAIL_AUDIT');
+  }
+}
+

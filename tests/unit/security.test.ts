@@ -9,7 +9,13 @@ import {
   validateUpiUtr,
   validatePanNumber,
   maskIdentifier,
-  sanitizeString
+  sanitizeString,
+  hashPassword,
+  verifyPassword,
+  generatePasswordResetToken,
+  hashResetToken,
+  validatePasswordStrength,
+  maskEmail
 } from '../../src/security';
 
 describe('Security & DPDP Compliance Suite', () => {
@@ -142,4 +148,72 @@ describe('Security & DPDP Compliance Suite', () => {
       expect(sanitizeString('<script>alert("xss")</script>')).toBe('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
     });
   });
+
+  describe('Admin Authentication & Password Reset Security', () => {
+    const testPassword = 'SecureAdmin@2026!';
+
+    it('should hash passwords using bcrypt (12 rounds) and verify accurately', async () => {
+      const hash = await hashPassword(testPassword);
+      expect(hash).toBeDefined();
+      expect(hash.startsWith('$2a$') || hash.startsWith('$2b$')).toBe(true);
+
+      const isValid = await verifyPassword(testPassword, hash);
+      expect(isValid).toBe(true);
+
+      const isInvalid = await verifyPassword('WrongPassword@123', hash);
+      expect(isInvalid).toBe(false);
+    });
+
+    it('should generate a 256-bit cryptographically secure reset token package with future expiration', () => {
+      const pkg = generatePasswordResetToken(20);
+      expect(pkg.rawToken).toBeDefined();
+      expect(pkg.rawToken.length).toBe(64); // 32 bytes in hex = 64 characters
+      expect(pkg.hashedToken).toBeDefined();
+      expect(pkg.hashedToken.length).toBe(64); // SHA-256 output = 64 characters
+      expect(pkg.expiresAt.getTime()).toBeGreaterThan(Date.now() + 19 * 60 * 1000);
+      expect(pkg.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 21 * 60 * 1000);
+    });
+
+    it('should deterministically derive SHA-256 digest of reset tokens', () => {
+      const raw = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+      const hash1 = hashResetToken(raw);
+      const hash2 = hashResetToken(raw);
+      expect(hash1).toBe(hash2);
+      expect(hash1.length).toBe(64);
+    });
+
+    it('should enforce strict password complexity rules', () => {
+      // Valid passwords
+      expect(validatePasswordStrength('ValidPass@2026').valid).toBe(true);
+      expect(validatePasswordStrength('DevSecure#99!').valid).toBe(true);
+
+      // Too short
+      expect(validatePasswordStrength('Short1!').valid).toBe(false);
+      expect(validatePasswordStrength('Short1!').error).toContain('at least 8 characters');
+
+      // Missing uppercase
+      expect(validatePasswordStrength('lowercase@2026').valid).toBe(false);
+      expect(validatePasswordStrength('lowercase@2026').error).toContain('uppercase letter');
+
+      // Missing lowercase
+      expect(validatePasswordStrength('UPPERCASE@2026').valid).toBe(false);
+      expect(validatePasswordStrength('UPPERCASE@2026').error).toContain('lowercase letter');
+
+      // Missing number
+      expect(validatePasswordStrength('NoNumbersHere!@#').valid).toBe(false);
+      expect(validatePasswordStrength('NoNumbersHere!@#').error).toContain('number');
+
+      // Missing special character
+      expect(validatePasswordStrength('NoSpecialChar2026').valid).toBe(false);
+      expect(validatePasswordStrength('NoSpecialChar2026').error).toContain('special character');
+    });
+
+    it('should mask admin emails to protect privacy in public responses', () => {
+      expect(maskEmail('pratapmaharaj9@gmail.com')).toBe('p***9@gmail.com');
+      expect(maskEmail('admin@trust.org')).toBe('a***n@trust.org');
+      expect(maskEmail('ab@domain.com')).toBe('a*@domain.com');
+      expect(maskEmail('invalid-email')).toBe('***@***.***');
+    });
+  });
 });
+

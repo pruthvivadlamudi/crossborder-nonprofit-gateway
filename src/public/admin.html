@@ -593,6 +593,48 @@
       text-align: center;
     }
 
+    .auth-view {
+      display: none;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+    }
+    .auth-view.active {
+      display: flex;
+    }
+    .pwd-req-list {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 16px;
+      text-align: left;
+      font-size: 0.74rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .pwd-req-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #64748b;
+      transition: color 0.2s ease;
+    }
+    .pwd-req-item.met {
+      color: #10b981;
+      font-weight: 600;
+    }
+    .pwd-req-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #475569;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .pwd-req-item.met .pwd-req-dot {
+      background: #10b981;
+      box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    }
+
     /* Mobile Optimization & Responsive Viewport Rules */
     @media (max-width: 900px) {
       .top-header {
@@ -668,26 +710,107 @@
 <div id="auth-gate">
   <div class="auth-card">
     <img src="/assets/badge.png" alt="Divya Yoga Mandali Trust Emblem" style="width: 72px; height: 72px; border-radius: 50%; box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35); border: 2px solid rgba(245, 158, 11, 0.4); margin-bottom: 14px; object-fit: cover; background: #0f172a;">
-    <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 6px;">Trustee Compliance Console</h2>
-    <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 24px; line-height: 1.4;">
-      Access restricted to authorized trustees and compliance auditors.
-    </p>
 
-    <form id="auth-form" onsubmit="handleAdminLogin(event)">
-      <div style="text-align: left; margin-bottom: 16px;">
-        <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
-          Trustee Passcode
-        </label>
-        <input type="password" id="auth-password" placeholder="Enter trustee passcode" required
-               style="width: 100%; padding: 12px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.95rem;">
+    <!-- VIEW 1: ADMIN LOGIN -->
+    <div id="auth-view-login" class="auth-view active">
+      <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 6px;">Trustee Compliance Console</h2>
+      <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 22px; line-height: 1.4;">
+        Access restricted to authorized trustees and compliance auditors.
+      </p>
+
+      <form id="auth-form" onsubmit="handleAdminLogin(event)" style="width: 100%;">
+        <div style="text-align: left; margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+            Administrator Email
+          </label>
+          <input type="email" id="auth-email" value="pratapmaharaj9@gmail.com" placeholder="trustee@domain.org" required
+                 style="width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.92rem;">
+        </div>
+        <div style="text-align: left; margin-bottom: 14px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+            Trustee Passcode
+          </label>
+          <input type="password" id="auth-password" placeholder="Enter trustee passcode" required
+                 style="width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.92rem;">
+        </div>
+        <div id="auth-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 12px; display: none;"></div>
+        <button type="submit" id="btn-unlock" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.92rem;">
+          🔒 Unlock Administrative Workspace
+        </button>
+      </form>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 18px; font-size: 0.78rem;">
+        <a href="javascript:void(0)" onclick="showAuthView('forgot')" style="color: #38bdf8; text-decoration: none; font-weight: 500;">
+          🔑 Forgot Passcode?
+        </a>
+        <span style="color: #64748b;">Database-Backed Auth</span>
       </div>
-      <div id="auth-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 12px; display: none;"></div>
-      <button type="submit" id="btn-unlock" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.92rem;">
-        🔒 Unlock Administrative Workspace
+    </div>
+
+    <!-- VIEW 2: FORGOT PASSWORD REQUEST -->
+    <div id="auth-view-forgot" class="auth-view">
+      <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 6px;">Reset Trustee Passcode</h2>
+      <p style="font-size: 0.84rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">
+        Enter your registered email address. A cryptographically secure reset link valid for <strong>20 minutes</strong> will be dispatched.
+      </p>
+
+      <form id="forgot-form" onsubmit="handleForgotPasswordRequest(event)" style="width: 100%;">
+        <div style="text-align: left; margin-bottom: 16px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+            Registered Administrator Email
+          </label>
+          <input type="email" id="forgot-email" value="pratapmaharaj9@gmail.com" placeholder="trustee@domain.org" required
+                 style="width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.92rem;">
+        </div>
+        <div id="forgot-status" style="display: none; padding: 12px 14px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 14px; line-height: 1.5; text-align: left;"></div>
+        <button type="submit" id="btn-send-reset" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.92rem;">
+          📨 Dispatch Secure Reset Link
+        </button>
+        <button type="button" onclick="showAuthView('login')" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 10px; padding: 10px; font-size: 0.84rem;">
+          ← Back to Sign In
+        </button>
+      </form>
+    </div>
+
+    <!-- VIEW 3: SET NEW PASSWORD -->
+    <div id="auth-view-reset" class="auth-view">
+      <h2 style="font-size: 1.35rem; font-weight: 700; margin-bottom: 6px;">Establish New Passcode</h2>
+      <div id="reset-token-status" style="width: 100%; padding: 11px 14px; border-radius: 8px; font-size: 0.8rem; margin-bottom: 16px; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); text-align: left; line-height: 1.4;">
+        ⏳ Verifying reset authorization token...
+      </div>
+
+      <form id="reset-form" onsubmit="handleExecutePasswordReset(event)" style="width: 100%; display: none;">
+        <div style="text-align: left; margin-bottom: 12px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+            New Administrator Passcode
+          </label>
+          <input type="password" id="reset-new-password" placeholder="Enter strong new passcode" required oninput="evaluatePasswordStrength(this.value)"
+                 style="width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.92rem;">
+        </div>
+        <div style="text-align: left; margin-bottom: 10px;">
+          <label style="display: block; font-size: 0.78rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px;">
+            Confirm New Passcode
+          </label>
+          <input type="password" id="reset-confirm-password" placeholder="Re-enter new passcode" required
+                 style="width: 100%; padding: 11px 14px; background: rgba(0,0,0,0.4); border: 1px solid var(--card-border); border-radius: 10px; color: white; font-family: inherit; font-size: 0.92rem;">
+        </div>
+
+        <!-- Complexity Requirements Indicator -->
+        <ul class="pwd-req-list">
+          <li class="pwd-req-item" id="req-length"><span class="pwd-req-dot"></span> 8+ Characters</li>
+          <li class="pwd-req-item" id="req-upper"><span class="pwd-req-dot"></span> Uppercase (A-Z)</li>
+          <li class="pwd-req-item" id="req-lower"><span class="pwd-req-dot"></span> Lowercase (a-z)</li>
+          <li class="pwd-req-item" id="req-number"><span class="pwd-req-dot"></span> Number (0-9)</li>
+          <li class="pwd-req-item" id="req-special" style="grid-column: span 2;"><span class="pwd-req-dot"></span> Special Symbol (!@#$%...)</li>
+        </ul>
+
+        <div id="reset-error" style="color: var(--danger); font-size: 0.8rem; margin-bottom: 12px; display: none; text-align: left;"></div>
+        <button type="submit" id="btn-submit-new-pwd" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px; font-size: 0.92rem;">
+          🛡️ Update Passcode & Invalidate Token
+        </button>
+      </form>
+      <button type="button" onclick="showAuthView('login')" class="btn btn-secondary" style="width: 100%; justify-content: center; margin-top: 10px; padding: 10px; font-size: 0.84rem;">
+        ← Back to Sign In
       </button>
-    </form>
-    <div style="margin-top: 20px; font-size: 0.75rem; color: #64748b;">
-      Default Master Key configured in <code style="color: #38bdf8;">.env</code> (ADMIN_PASSWORD)
     </div>
   </div>
 </div>
@@ -1162,8 +1285,14 @@
   let chartCountries = null;
   let chartFcraCategory = null;
   let pollInterval = null;
+  let activeResetToken = '';
+
   // Explicit Global Scope Bindings
   window.handleAdminLogin = handleAdminLogin;
+  window.showAuthView = showAuthView;
+  window.handleForgotPasswordRequest = handleForgotPasswordRequest;
+  window.handleExecutePasswordReset = handleExecutePasswordReset;
+  window.evaluatePasswordStrength = evaluatePasswordStrength;
   window.switchWorkspaceTab = switchWorkspaceTab;
   window.filterLedger = filterLedger;
   window.inspectTransaction = inspectTransaction;
@@ -1177,6 +1306,20 @@
   window.sendTestEmail = sendTestEmail;
   window.openEmailPreviewWindow = openEmailPreviewWindow;
 
+  function showAuthView(viewName) {
+    document.querySelectorAll('.auth-view').forEach(v => v.classList.remove('active'));
+    const target = document.getElementById(`auth-view-${viewName}`);
+    if (target) target.classList.add('active');
+
+    // Reset status and error elements
+    const authErr = document.getElementById('auth-error');
+    if (authErr) { authErr.textContent = ''; authErr.style.display = 'none'; }
+    const forgotStatus = document.getElementById('forgot-status');
+    if (forgotStatus) { forgotStatus.textContent = ''; forgotStatus.style.display = 'none'; }
+    const resetErr = document.getElementById('reset-error');
+    if (resetErr) { resetErr.textContent = ''; resetErr.style.display = 'none'; }
+  }
+
   // Initialize and Bind Event Listeners
   document.addEventListener('DOMContentLoaded', async () => {
     // Bind form submit
@@ -1187,6 +1330,26 @@
     const btnUnlock = document.getElementById('btn-unlock');
     if (btnUnlock) {
       btnUnlock.addEventListener('click', handleAdminLogin);
+    }
+
+    // Check if URL has reset token in hash (#reset-token=...) or query param (?token=... or ?reset-token=...)
+    const hash = window.location.hash || '';
+    const search = window.location.search || '';
+    let resetToken = '';
+
+    const hashMatch = hash.match(/reset-token=([a-f0-9]+)/i);
+    if (hashMatch) {
+      resetToken = hashMatch[1];
+    } else {
+      const urlParams = new URLSearchParams(search);
+      resetToken = urlParams.get('token') || urlParams.get('reset-token') || '';
+    }
+
+    if (resetToken) {
+      showAuthGate();
+      showAuthView('reset');
+      initiatePasswordResetView(resetToken);
+      return;
     }
 
     // Bind workspace tabs
@@ -1205,9 +1368,11 @@
         localStorage.removeItem('fcra_admin_token');
         adminToken = '';
         showAuthGate();
+        showAuthView('login');
       }
     } else {
       showAuthGate();
+      showAuthView('login');
     }
   });
 
@@ -1224,6 +1389,7 @@
   // Authentication Handlers
   async function handleAdminLogin(e) {
     if (e && e.preventDefault) e.preventDefault();
+    const email = (document.getElementById('auth-email')?.value || '').trim();
     const password = document.getElementById('auth-password').value;
     const errElem = document.getElementById('auth-error');
     errElem.style.display = 'none';
@@ -1232,7 +1398,7 @@
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
 
@@ -1248,6 +1414,181 @@
     } catch (err) {
       errElem.textContent = 'Network or server error during authentication.';
       errElem.style.display = 'block';
+    }
+  }
+
+  // Forgot Password Handler
+  async function handleForgotPasswordRequest(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const email = (document.getElementById('forgot-email')?.value || '').trim();
+    const statusBox = document.getElementById('forgot-status');
+    const submitBtn = document.getElementById('btn-send-reset');
+
+    if (!email) {
+      alert('Please enter your administrator email address.');
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Dispatching...';
+    statusBox.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/admin/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+
+      statusBox.style.display = 'block';
+      if (res.ok) {
+        statusBox.style.background = 'rgba(16, 185, 129, 0.15)';
+        statusBox.style.color = '#34d399';
+        statusBox.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        statusBox.innerHTML = `<strong>✓ Authorization Dispatched</strong><br>${escapeHtml(data.message)}`;
+      } else {
+        statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        statusBox.style.color = '#f87171';
+        statusBox.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+        statusBox.textContent = data.error || 'Request failed. Please wait before retrying.';
+      }
+    } catch (err) {
+      statusBox.style.display = 'block';
+      statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+      statusBox.style.color = '#f87171';
+      statusBox.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      statusBox.textContent = 'Network or server error sending reset link.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '📨 Dispatch Secure Reset Link';
+    }
+  }
+
+  // Token Verification & Reset View Activation
+  async function initiatePasswordResetView(token) {
+    activeResetToken = token;
+    const statusBox = document.getElementById('reset-token-status');
+    const resetForm = document.getElementById('reset-form');
+
+    statusBox.style.background = 'rgba(56, 189, 248, 0.12)';
+    statusBox.style.color = '#38bdf8';
+    statusBox.style.border = '1px solid rgba(56, 189, 248, 0.3)';
+    statusBox.textContent = '⏳ Verifying reset authorization token with server...';
+
+    try {
+      const res = await fetch(`/api/admin/verify-reset-token?token=${encodeURIComponent(token)}`);
+      const data = await res.json();
+
+      if (!res.ok || !data.valid) {
+        statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+        statusBox.style.color = '#f87171';
+        statusBox.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+        statusBox.innerHTML = `<strong>⚠️ Reset Link Invalid or Expired</strong><br>${escapeHtml(data.error || 'This reset link has expired or has already been used.')}`;
+        resetForm.style.display = 'none';
+        return;
+      }
+
+      statusBox.style.background = 'rgba(16, 185, 129, 0.15)';
+      statusBox.style.color = '#34d399';
+      statusBox.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      statusBox.innerHTML = `<strong>✓ Authorization Verified</strong><br>Account: <code>${escapeHtml(data.email || 'Administrator')}</code> (${escapeHtml(data.fullName || 'Trustee')})`;
+      resetForm.style.display = 'block';
+    } catch (err) {
+      statusBox.style.background = 'rgba(239, 68, 68, 0.15)';
+      statusBox.style.color = '#f87171';
+      statusBox.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      statusBox.textContent = 'Error verifying token. Please check internet connection.';
+    }
+  }
+
+  // Real-Time Password Complexity Indicator
+  function evaluatePasswordStrength(pwd) {
+    const hasLen = pwd.length >= 8;
+    const hasUpper = /[A-Z]/.test(pwd);
+    const hasLower = /[a-z]/.test(pwd);
+    const hasNum = /[0-9]/.test(pwd);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd);
+
+    updateReq('req-length', hasLen);
+    updateReq('req-upper', hasUpper);
+    updateReq('req-lower', hasLower);
+    updateReq('req-number', hasNum);
+    updateReq('req-special', hasSpecial);
+
+    function updateReq(id, met) {
+      const el = document.getElementById(id);
+      if (el) el.classList.toggle('met', met);
+    }
+  }
+
+  // Password Reset Execution Handler
+  async function handleExecutePasswordReset(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    const newPassword = document.getElementById('reset-new-password').value;
+    const confirmPassword = document.getElementById('reset-confirm-password').value;
+    const errElem = document.getElementById('reset-error');
+    const submitBtn = document.getElementById('btn-submit-new-pwd');
+    const statusBox = document.getElementById('reset-token-status');
+
+    errElem.style.display = 'none';
+
+    if (newPassword !== confirmPassword) {
+      errElem.textContent = 'New passcodes do not match.';
+      errElem.style.display = 'block';
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      errElem.textContent = 'Passcode must be at least 8 characters in length.';
+      errElem.style.display = 'block';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Updating Passcode...';
+
+    try {
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: activeResetToken, newPassword })
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        errElem.textContent = data.error || 'Failed to update passcode.';
+        errElem.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = '🛡️ Update Passcode & Invalidate Token';
+        return;
+      }
+
+      // Success
+      document.getElementById('reset-form').style.display = 'none';
+      statusBox.style.background = 'rgba(16, 185, 129, 0.2)';
+      statusBox.style.color = '#34d399';
+      statusBox.style.border = '1px solid rgba(16, 185, 129, 0.5)';
+      statusBox.innerHTML = `<strong>🎉 Passcode Reset Complete!</strong><br>${escapeHtml(data.message)}<br><small style="color:#94a3b8;">Redirecting to sign in...</small>`;
+
+      // Clear token from URL hash without page reload
+      if (window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      setTimeout(() => {
+        showAuthView('login');
+        const pwdInput = document.getElementById('auth-password');
+        if (pwdInput) {
+          pwdInput.value = '';
+          pwdInput.focus();
+        }
+      }, 2500);
+    } catch (err) {
+      errElem.textContent = 'Network or server error updating passcode.';
+      errElem.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = '🛡️ Update Passcode & Invalidate Token';
     }
   }
 

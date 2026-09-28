@@ -38,6 +38,7 @@
     "@types/node-fetch": "^2.6.11",
     "@types/pg": "^8.11.6",
     "@types/sqlite3": "^3.1.11",
+    "bcryptjs": "^3.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
     "express-rate-limit": "^8.7.0",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^30.0.0",
     "@types/supertest": "^7.2.1",
     "jest": "^30.5.2",

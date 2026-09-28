@@ -214,3 +214,109 @@ export function sanitizeString(input: string | null | undefined, maxLength: numb
       }
     });
 }
+
+/**
+ * ============================================================================
+ * ADMIN AUTHENTICATION, PASSWORD HASHING & RESET TOKEN UTILITIES
+ * ============================================================================
+ */
+import bcrypt from 'bcryptjs';
+
+const BCRYPT_SALT_ROUNDS = 12;
+const RESET_TOKEN_EXPIRATION_MINUTES = 20;
+
+/**
+ * Hashes a plaintext password using bcrypt with 12 salt rounds
+ */
+export async function hashPassword(password: string): Promise<string> {
+  if (!password || typeof password !== 'string') {
+    throw new Error('Password must be a non-empty string.');
+  }
+  return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+}
+
+/**
+ * Verifies a plaintext password against a bcrypt hash
+ */
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  if (!password || !hash) return false;
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch {
+    return false;
+  }
+}
+
+export interface PasswordResetTokenPackage {
+  rawToken: string;
+  hashedToken: string;
+  expiresAt: Date;
+}
+
+/**
+ * Generates a cryptographically secure 256-bit random reset token
+ * Returns raw token for user email, SHA-256 hash for database storage, and expiration timestamp
+ */
+export function generatePasswordResetToken(expirationMinutes: number = RESET_TOKEN_EXPIRATION_MINUTES): PasswordResetTokenPackage {
+  const rawToken = crypto.randomBytes(32).toString('hex'); // 64 hex characters (256 bits entropy)
+  const hashedToken = hashResetToken(rawToken);
+  const expiresAt = new Date(Date.now() + expirationMinutes * 60 * 1000);
+
+  return { rawToken, hashedToken, expiresAt };
+}
+
+/**
+ * Derives SHA-256 digest of a reset token for secure database lookup
+ */
+export function hashResetToken(token: string): string {
+  if (!token || typeof token !== 'string') return '';
+  return crypto.createHash('sha256').update(token.trim()).digest('hex');
+}
+
+/**
+ * Validates password complexity:
+ * - Minimum 8 characters
+ * - At least one uppercase letter (A-Z)
+ * - At least one lowercase letter (a-z)
+ * - At least one number (0-9)
+ * - At least one special character
+ */
+export function validatePasswordStrength(password: string): { valid: boolean; error?: string } {
+  if (!password || typeof password !== 'string') {
+    return { valid: false, error: 'Password is required.' };
+  }
+  if (password.length < 8) {
+    return { valid: false, error: 'Password must be at least 8 characters in length.' };
+  }
+  if (password.length > 128) {
+    return { valid: false, error: 'Password cannot exceed 128 characters.' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, error: 'Password must include at least one uppercase letter.' };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, error: 'Password must include at least one lowercase letter.' };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { valid: false, error: 'Password must include at least one number.' };
+  }
+  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    return { valid: false, error: 'Password must include at least one special character.' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Masks email address for secure public/semi-public confirmation
+ * Example: 'pratapmaharaj9@gmail.com' -> 'p***9@gmail.com'
+ */
+export function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return '***@***.***';
+  const [user, domain] = email.split('@');
+  if (user.length <= 2) {
+    return `${user[0]}*@${domain}`;
+  }
+  return `${user[0]}***${user.slice(-1)}@${domain}`;
+}
+

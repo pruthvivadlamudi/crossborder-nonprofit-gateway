@@ -6,6 +6,7 @@ import sqlite3 from 'sqlite3';
 import { open, Database as SqliteDB } from 'sqlite';
 import dotenv from 'dotenv';
 import { logger } from './logger';
+import { hashPassword } from './security';
 
 dotenv.config();
 
@@ -39,10 +40,98 @@ export async function initDatabase(): Promise<void> {
       client.release();
       isPostgres = true;
       logger.info('Connected to PostgreSQL database.', undefined, 'DB_INIT');
+
+      // Initialize PostgreSQL Schema
+      await pgPool.query(`
+        CREATE TABLE IF NOT EXISTS donors (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          first_name TEXT NOT NULL,
+          last_name TEXT NOT NULL,
+          nationality TEXT NOT NULL,
+          is_nri INTEGER NOT NULL DEFAULT 0,
+          passport_or_id_number TEXT,
+          country_of_residence TEXT NOT NULL,
+          residential_address TEXT NOT NULL,
+          phone_number TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS donations (
+          id TEXT PRIMARY KEY,
+          donor_id TEXT NOT NULL REFERENCES donors(id),
+          trust_id TEXT NOT NULL DEFAULT 'divya',
+          trust_name TEXT NOT NULL DEFAULT 'Primary Non-Profit Trust',
+          paypal_order_id TEXT UNIQUE NOT NULL,
+          paypal_capture_id TEXT UNIQUE,
+          idempotency_key TEXT UNIQUE NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'USD',
+          gross_amount REAL NOT NULL,
+          paypal_fee REAL DEFAULT 0.00,
+          net_amount REAL,
+          status TEXT NOT NULL DEFAULT 'CREATED',
+          fcra_purpose TEXT NOT NULL DEFAULT 'SOCIAL',
+          fcra_financial_year TEXT NOT NULL DEFAULT '2026-2027',
+          receipt_email_sent INTEGER DEFAULT 0,
+          payment_method TEXT DEFAULT 'PAYPAL',
+          upi_vpa TEXT,
+          upi_ref TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS webhook_logs (
+          id TEXT PRIMARY KEY,
+          event_id TEXT UNIQUE NOT NULL,
+          event_type TEXT NOT NULL,
+          resource_type TEXT NOT NULL,
+          payload TEXT NOT NULL,
+          processed_status TEXT NOT NULL DEFAULT 'PENDING',
+          error_message TEXT,
+          received_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS backup_logs (
+          id TEXT PRIMARY KEY,
+          backup_filename TEXT NOT NULL,
+          backup_size_bytes BIGINT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS email_dispatch_logs (
+          id TEXT PRIMARY KEY,
+          order_id TEXT,
+          donor_email TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          status TEXT NOT NULL,
+          message_id TEXT,
+          error_details TEXT,
+          sent_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS admin_users (
+          id TEXT PRIMARY KEY,
+          email TEXT UNIQUE NOT NULL,
+          password_hash TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'ADMIN',
+          full_name TEXT NOT NULL DEFAULT 'Managing Trustee',
+          reset_token TEXT,
+          reset_token_expiry TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+
+        ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS reset_token TEXT;
+        ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP WITH TIME ZONE;
+      `);
+
+      await seedDefaultAdminUser();
       return;
     } catch (err: any) {
       logger.warn(`PostgreSQL connection failed (${err.message}). Falling back to local embedded SQLite.`, { error: err.message }, 'DB_FALLBACK');
       pgPool = null;
+      isPostgres = false;
     }
   }
 
@@ -125,16 +214,23 @@ export async function initDatabase(): Promise<void> {
       error_details TEXT,
       sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'ADMIN',
+      full_name TEXT NOT NULL DEFAULT 'Managing Trustee',
+      reset_token TEXT,
+      reset_token_expiry DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
-  // Ensure receipt_email_sent and UPI columns exist on donations
+  // Ensure receipt_email_sent, UPI columns, and admin_users columns exist
   try {
-    if (isPostgres && pgPool) {
-      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS receipt_email_sent INTEGER DEFAULT 0;`);
-      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'PAYPAL';`);
-      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS upi_vpa TEXT;`);
-      await pgPool.query(`ALTER TABLE donations ADD COLUMN IF NOT EXISTS upi_ref TEXT;`);
-    } else if (sqliteDb) {
+    if (sqliteDb) {
       const colCheck = await sqliteDb.all(`PRAGMA table_info(donations);`);
       const hasCol = colCheck.some((c: any) => c.name === 'receipt_email_sent');
       if (!hasCol) {
@@ -152,10 +248,24 @@ export async function initDatabase(): Promise<void> {
       if (!hasUpiRef) {
         await sqliteDb.run(`ALTER TABLE donations ADD COLUMN upi_ref TEXT;`);
       }
+
+      // Check admin_users columns
+      const adminColCheck = await sqliteDb.all(`PRAGMA table_info(admin_users);`);
+      const hasResetToken = adminColCheck.some((c: any) => c.name === 'reset_token');
+      if (!hasResetToken) {
+        await sqliteDb.run(`ALTER TABLE admin_users ADD COLUMN reset_token TEXT;`);
+      }
+      const hasResetExpiry = adminColCheck.some((c: any) => c.name === 'reset_token_expiry');
+      if (!hasResetExpiry) {
+        await sqliteDb.run(`ALTER TABLE admin_users ADD COLUMN reset_token_expiry DATETIME;`);
+      }
     }
   } catch (err: any) {
     // Non-fatal if columns exist
   }
+
+  // Seed default admin user if table is empty
+  await seedDefaultAdminUser();
 
   logger.info(`Embedded local database online at: ${dbFilePath} [WAL Mode Active]`, { dbFilePath, journalMode: 'WAL' }, 'DB_INIT');
 
@@ -348,4 +458,128 @@ export async function getDatabaseStatus(): Promise<any> {
     }
   };
 }
+
+/**
+ * Admin User Database Record Contract
+ */
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  password_hash: string;
+  role: string;
+  full_name: string;
+  reset_token: string | null;
+  reset_token_expiry: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Seed Default Admin User
+ * If the admin_users table is empty, seeds the primary managing trustee account
+ * with a bcrypt-hashed password derived from environment or secure default.
+ */
+export async function seedDefaultAdminUser(): Promise<void> {
+  try {
+    const existing = await dbQuery(`SELECT COUNT(*) as count FROM admin_users`);
+    const count = parseInt(existing.rows[0]?.count || '0', 10);
+    if (count === 0) {
+      const defaultEmail = (process.env.ADMIN_EMAIL || 'pratapmaharaj9@gmail.com').toLowerCase().trim();
+      const defaultPassword = process.env.ADMIN_PASSWORD || 'Trustee@2026!';
+      const defaultHash = await hashPassword(defaultPassword);
+      const defaultId = crypto.randomUUID();
+
+      await dbQuery(`
+        INSERT INTO admin_users (id, email, password_hash, role, full_name)
+        VALUES ($1, $2, $3, $4, $5)
+      `, [defaultId, defaultEmail, defaultHash, 'SUPER_ADMIN', 'Sri Pratap Maharaj']);
+      logger.info(`Seeded default admin user into database: ${defaultEmail}`, { email: defaultEmail }, 'DB_SEED');
+    }
+  } catch (err: any) {
+    logger.warn(`Admin seed check warning: ${err.message}`, { error: err.message }, 'DB_SEED');
+  }
+}
+
+/**
+ * Find Admin User by Email (Case-Insensitive)
+ */
+export async function getAdminByEmail(email: string): Promise<AdminUserRecord | null> {
+  if (!email || typeof email !== 'string') return null;
+  const cleanEmail = email.toLowerCase().trim();
+  const res = await dbQuery(`SELECT * FROM admin_users WHERE LOWER(email) = $1 LIMIT 1`, [cleanEmail]);
+  return res.rows[0] || null;
+}
+
+/**
+ * Retrieve Primary Administrator (Used for single-tenant Trustee convenience)
+ */
+export async function getPrimaryAdmin(): Promise<AdminUserRecord | null> {
+  const res = await dbQuery(`SELECT * FROM admin_users ORDER BY created_at ASC LIMIT 1`);
+  return res.rows[0] || null;
+}
+
+/**
+ * Save Cryptographically Hashed Password Reset Token & Expiration
+ */
+export async function setAdminPasswordResetToken(
+  email: string,
+  hashedToken: string,
+  expiresAt: Date
+): Promise<boolean> {
+  if (!email || !hashedToken) return false;
+  const cleanEmail = email.toLowerCase().trim();
+  const expiryIso = expiresAt.toISOString();
+
+  await dbQuery(`
+    UPDATE admin_users 
+    SET reset_token = $1, reset_token_expiry = $2, updated_at = CURRENT_TIMESTAMP
+    WHERE LOWER(email) = $3
+  `, [hashedToken, expiryIso, cleanEmail]);
+
+  return true;
+}
+
+/**
+ * Find Admin by Valid, Non-Expired Reset Token
+ * Compares incoming hashed token against database and verifies timestamp
+ */
+export async function getAdminByValidResetToken(hashedToken: string): Promise<AdminUserRecord | null> {
+  if (!hashedToken || typeof hashedToken !== 'string') return null;
+
+  const res = await dbQuery(`
+    SELECT * FROM admin_users 
+    WHERE reset_token = $1 
+    LIMIT 1
+  `, [hashedToken]);
+
+  const user = res.rows[0] as AdminUserRecord | undefined;
+  if (!user || !user.reset_token_expiry) return null;
+
+  const expiryTime = new Date(user.reset_token_expiry).getTime();
+  if (isNaN(expiryTime) || Date.now() > expiryTime) {
+    return null; // Expired
+  }
+
+  return user;
+}
+
+/**
+ * Update Admin Password Hash and Invalidate/Clear Reset Token & Expiry Immediately
+ * Prevents token replay attacks
+ */
+export async function updateAdminPasswordAndClearToken(
+  adminId: string,
+  newPasswordHash: string
+): Promise<boolean> {
+  if (!adminId || !newPasswordHash) return false;
+
+  await dbQuery(`
+    UPDATE admin_users
+    SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $2
+  `, [newPasswordHash, adminId]);
+
+  return true;
+}
+
 
