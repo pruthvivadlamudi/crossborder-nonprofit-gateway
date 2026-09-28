@@ -39,6 +39,10 @@ interface AuthenticatedRequest extends Request {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable 'trust proxy' for cloud reverse proxies (Render, Cloudflare, AWS)
+// Ensures express-rate-limit and audit loggers accurately identify real client IPs from X-Forwarded-For
+app.set('trust proxy', 1);
+
 // Security: Enforce Strict HTTP Security Headers via Helmet
 app.use(helmet({
   contentSecurityPolicy: {
@@ -108,6 +112,7 @@ const apiLimiter = rateLimit({
   max: 180,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { error: 'Rate limit exceeded. Please wait a minute before making more requests.' }
 });
 
@@ -117,6 +122,7 @@ const authLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
   message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' }
 });
 
