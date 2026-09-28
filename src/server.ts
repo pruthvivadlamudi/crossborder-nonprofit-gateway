@@ -20,6 +20,15 @@ import {
   DonationEmailData,
   renderDonationEmailHtml
 } from './email';
+import {
+  timingSafeStringCompare,
+  validateDonationAmount,
+  validateUpiUtr,
+  encryptPII,
+  decryptPII,
+  encryptDonorRecord,
+  decryptDonorRecord
+} from './security';
 
 dotenv.config();
 
@@ -78,9 +87,17 @@ app.use(helmet({
       upgradeInsecureRequests: null
     }
   },
-  hsts: false,
+  hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   crossOriginEmbedderPolicy: false
 }));
+
+// Security: Block unsafe HTTP methods
+app.use((req, res, next) => {
+  if (req.method === 'TRACE' || req.method === 'TRACK') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+  next();
+});
 
 // Structured Request Tracing & Correlation Middleware
 app.use(requestLoggingMiddleware);
@@ -105,8 +122,9 @@ const authLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// Preserve raw request buffer for PayPal webhook signature verification
+// Preserve raw request buffer for PayPal webhook signature verification with 100kb payload ceiling
 app.use(express.json({
+  limit: '100kb',
   verify: (req: AuthenticatedRequest, res, buf) => {
     req.rawBody = buf.toString('utf8');
   }
@@ -535,10 +553,11 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
       currency = 'USD'
     } = req.body;
 
-    const donationAmount = parseFloat(amount);
-    if (isNaN(donationAmount) || donationAmount <= 0) {
-      return res.status(400).json({ error: 'Invalid donation amount.' });
+    const amountValidation = validateDonationAmount(amount, currency);
+    if (!amountValidation.valid) {
+      return res.status(400).json({ error: amountValidation.error });
     }
+    const donationAmount = amountValidation.amountNum;
 
     const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
     const donorId = uuidv4();
@@ -550,9 +569,11 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
     const safeEmail = (email || `donor-${Date.now()}@generous-patron.org`).toLowerCase().trim();
     const safeNationality = (nationality || 'International').trim();
     const safeCountry = (countryOfResidence || 'US').toUpperCase().trim();
-    const safeAddress = (residentialAddress || 'Provided via Payment Gateway').trim();
+    const rawAddress = residentialAddress ? residentialAddress.trim() : 'Provided via Payment Gateway';
+    const encryptedAddress = encryptPII(rawAddress) || rawAddress;
+    const encryptedPassport = passportOrId ? encryptPII(passportOrId.trim()) : null;
 
-    // Upsert Donor Profile
+    // Upsert Donor Profile with AES-256-GCM encryption on sensitive columns
     await dbQuery(`
       INSERT INTO donors (
         id, email, first_name, last_name, nationality, is_nri, passport_or_id_number,
@@ -574,9 +595,9 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
       safeLastName,
       safeNationality,
       isNri ? 1 : 0,
-      passportOrId ? passportOrId.trim() : null,
+      encryptedPassport,
       safeCountry,
-      safeAddress
+      encryptedAddress
     ]);
 
     // Retrieve active donor ID
@@ -655,12 +676,12 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
     // Redundancy: Mirror event to append-only immutable ledger
     recordLedgerMirrorEvent('DONOR', {
       donorId: activeDonorId,
-      email: email.toLowerCase().trim(),
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
-      nationality: nationality.trim(),
+      email: safeEmail,
+      firstName: safeFirstName,
+      lastName: safeLastName,
+      nationality: safeNationality,
       isNri: isNri ? 1 : 0,
-      countryOfResidence: countryOfResidence.toUpperCase().trim()
+      countryOfResidence: safeCountry
     });
     recordLedgerMirrorEvent('DONATION', {
       orderId,
@@ -797,7 +818,12 @@ app.post('/api/donations/capture-order', async (req: Request, res: Response) => 
     let fee: number;
     let net: number;
 
-    const donationRow = await dbQuery('SELECT trust_id, gross_amount FROM donations WHERE paypal_order_id = $1', [orderId]);
+    const donationRow = await dbQuery('SELECT trust_id, gross_amount, status FROM donations WHERE paypal_order_id = $1', [orderId]);
+    if (!donationRow.rows || donationRow.rows.length === 0) {
+      return res.status(404).json({ error: 'Donation order not found in records.' });
+    }
+
+    const expectedGross = parseFloat(donationRow.rows[0].gross_amount);
     const trustId = donationRow.rows[0]?.trust_id || req.body.trustId || 'divya';
     const creds = getTrustCredentials(trustId);
 
@@ -822,10 +848,16 @@ app.post('/api/donations/capture-order', async (req: Request, res: Response) => 
       gross = parseFloat(captureUnit?.amount?.value || '0.00');
       fee = parseFloat(captureUnit?.seller_receivable_breakdown?.paypal_fee?.value || '0.00');
       net = parseFloat(captureUnit?.seller_receivable_breakdown?.net_amount?.value || `${gross - fee}`);
+
+      // Amount Tampering Safeguard: Ensure gateway captured amount matches expected order amount
+      if (Math.abs(gross - expectedGross) > 0.01) {
+        logger.error('Amount tampering detected on capture!', undefined, { orderId, expectedGross, capturedGross: gross }, (req as any).correlationId);
+        return res.status(400).json({ error: 'Settlement amount mismatch detected. Transaction flagged for security review.' });
+      }
     } else {
       // Mock Capture
       captureId = `MOCK-CAPTURE-${Date.now()}`;
-      gross = donationRow.rows[0]?.gross_amount || 50.0;
+      gross = expectedGross || 50.0;
       fee = parseFloat((gross * 0.044 + 0.30).toFixed(2));
       net = parseFloat((gross - fee).toFixed(2));
     }
@@ -895,10 +927,11 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
       amount
     } = req.body;
 
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      return res.status(400).json({ error: 'Invalid donation amount.' });
+    const amountValidation = validateDonationAmount(amount, 'INR');
+    if (!amountValidation.valid) {
+      return res.status(400).json({ error: amountValidation.error });
     }
+    const numAmount = amountValidation.amountNum;
 
     // Gracefully handle 1-click giving without blocking donors
     const safeFirstName = (firstName || 'Devoted').trim();
@@ -906,7 +939,10 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
     const safeEmail = (email || `donor-${Date.now()}@generous-patron.org`).toLowerCase().trim();
     const safeNationality = (nationality || 'Indian').trim();
     const safeCountry = (countryOfResidence || 'India').trim();
-    const safeAddress = (residentialAddress || 'Direct UPI Transfer').trim();
+    const rawAddress = residentialAddress ? residentialAddress.trim() : 'Direct UPI Transfer';
+    const encryptedAddress = encryptPII(rawAddress) || rawAddress;
+    const encryptedPhone = phoneNumber ? encryptPII(phoneNumber.trim()) : null;
+    const encryptedPassport = passportOrId ? encryptPII(passportOrId.trim()) : null;
 
     const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
     const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
@@ -914,7 +950,7 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
     const orderId = `UPI-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
     const idempotencyKey = `UPI-IDEM-${orderId}`;
 
-    // 1. Upsert Donor Profile
+    // 1. Upsert Donor Profile with AES-256-GCM encryption on sensitive columns
     let donorId: string;
     const existingDonor = await dbQuery('SELECT id FROM donors WHERE email = $1', [safeEmail]);
 
@@ -929,12 +965,12 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
       `, [
         safeFirstName,
         safeLastName,
-        phoneNumber || null,
+        encryptedPhone,
         safeNationality,
         isNri ? 1 : 0,
-        passportOrId || null,
+        encryptedPassport,
         safeCountry,
-        safeAddress,
+        encryptedAddress,
         donorId
       ]);
     } else {
@@ -949,12 +985,12 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
         safeFirstName,
         safeLastName,
         safeEmail,
-        phoneNumber || null,
+        encryptedPhone,
         safeNationality,
         isNri ? 1 : 0,
-        passportOrId || null,
+        encryptedPassport,
         safeCountry,
-        safeAddress
+        encryptedAddress
       ]);
       recordLedgerMirrorEvent('DONOR', { donorId, email: safeEmail, nationality: safeNationality });
     }
@@ -1046,6 +1082,23 @@ app.post('/api/donations/upi/verify', async (req: Request, res: Response) => {
 
     if (!orderId) {
       return res.status(400).json({ error: 'Missing UPI order ID.' });
+    }
+
+    if (utr) {
+      const cleanUtr = utr.trim();
+      if (!validateUpiUtr(cleanUtr)) {
+        return res.status(400).json({ error: 'Invalid bank UTR / reference format. Expected a 10 to 22 character alphanumeric reference.' });
+      }
+
+      // Replay Attack Prevention: Verify this bank UTR reference hasn't already been confirmed on another donation
+      const dupUtrCheck = await dbQuery(
+        'SELECT id FROM donations WHERE upi_ref = $1 AND paypal_order_id != $2 AND status = $3',
+        [cleanUtr, orderId, 'CAPTURED']
+      );
+      if (dupUtrCheck.rows && dupUtrCheck.rows.length > 0) {
+        logger.warn('Duplicate UTR reuse attempt detected', { utr: cleanUtr, orderId }, 'UPI_DUPLICATE_UTR', correlationId);
+        return res.status(409).json({ error: 'This bank UTR reference has already been verified and recorded for another donation.' });
+      }
     }
 
     const checkRes = await dbQuery('SELECT * FROM donations WHERE paypal_order_id = $1', [orderId]);
@@ -1191,12 +1244,8 @@ app.post('/api/admin/login', authLimiter, (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Passcode is required.' });
   }
 
-  // Constant-time comparison to prevent timing attacks
-  const inputBuffer = Buffer.from(password);
-  const secretBuffer = Buffer.from(ADMIN_PASSWORD);
-
-  const isMatch = inputBuffer.length === secretBuffer.length &&
-    crypto.timingSafeEqual(inputBuffer, secretBuffer);
+  // Constant-time comparison using SHA-256 digests to prevent timing attacks
+  const isMatch = timingSafeStringCompare(password, ADMIN_PASSWORD);
 
   if (!isMatch) {
     logger.warn('Failed admin login attempt', { ip: req.ip }, 'ADMIN_AUTH_FAILED', (req as any).correlationId);
@@ -1321,7 +1370,7 @@ app.get('/api/admin/donations', adminAuthMiddleware, async (req: Request, res: R
       LIMIT 100;
     `;
     const result = await dbQuery(sql);
-    let donations = result.rows;
+    let donations = result.rows.map(row => decryptDonorRecord(row));
     if (trustFilter) {
       donations = donations.filter((item: any) => item.trust_id === trustFilter);
     }
@@ -1467,7 +1516,7 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
       return res.status(404).json({ error: 'Transaction record not found.' });
     }
 
-    const tx = result.rows[0];
+    const tx = decryptDonorRecord(result.rows[0]);
     const profile = TRUST_PROFILES[tx.trust_id] || TRUST_PROFILES.divya;
 
     const gross = parseFloat(tx.gross_amount) || 0;
@@ -1643,7 +1692,11 @@ app.get('/api/admin/fc4-export', adminAuthMiddleware, async (req: Request, res: 
       ORDER BY d.created_at ASC;
     `;
     const result = await dbQuery(sql);
-    const rows = result.rows;
+    const rows = result.rows.map((r: any) => ({
+      ...r,
+      passport_id: decryptPII(r.passport_id) || 'N/A',
+      residential_address: decryptPII(r.residential_address) || ''
+    }));
 
     const format = req.query.format as string;
     if (format === 'json') {
@@ -1880,7 +1933,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 // Boot Server & Initialize Database
 async function startServer() {
   await initDatabase();
-  app.listen(PORT, () => {
+  return app.listen(PORT, () => {
     logger.info(`FinTech Cross-Border Non-Profit Engine Online on port ${PORT} [${PAYPAL_MODE.toUpperCase()}]`, {
       port: PORT,
       paypalMode: PAYPAL_MODE,
@@ -1901,5 +1954,10 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only launch standalone listener if not being imported in an automated test runner
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+export { app, startServer };
 

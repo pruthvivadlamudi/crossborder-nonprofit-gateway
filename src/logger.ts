@@ -19,8 +19,46 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB per file
 const ACTIVE_LEVEL: LogLevel = (process.env.LOG_LEVEL as LogLevel) || 'INFO';
 const SENSITIVE_KEYS = new Set([
   'password', 'clientsecret', 'client_secret', 'secret',
-  'token', 'authorization', 'cookie', 'accesstoken', 'access_token'
+  'token', 'authorization', 'cookie', 'accesstoken', 'access_token',
+  'jwt_secret', 'apikey', 'api_key', 'private_key', 'key',
+  'cvv', 'cvc', 'card_number', 'cardnumber', 'pan', 'aadhaar',
+  'bank_account', 'account_number', 'upi_pin', 'resend_api_key'
 ]);
+
+/**
+ * Redacts string values that match sensitive PII/financial patterns
+ */
+function sanitizeStringValue(str: string, keyName: string): string {
+  if (!str) return str;
+  const lowerKey = keyName.toLowerCase();
+
+  // Explicit secret keys
+  if (SENSITIVE_KEYS.has(lowerKey)) {
+    return '[REDACTED_SECRET]';
+  }
+
+  // Credit card regex (13 to 19 digits)
+  if (/\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13})\b/.test(str)) {
+    return str.replace(/\b(?:\d[ -]*?){13,16}\b/g, '****-****-****-****');
+  }
+
+  // PAN / National Tax ID
+  if (lowerKey.includes('pan') || lowerKey.includes('tax_id') || lowerKey.includes('passport')) {
+    return str.length > 4 ? `***-***-${str.slice(-4)}` : '***';
+  }
+
+  // Bank account numbers (mask all except last 4 digits)
+  if (lowerKey.includes('account') || lowerKey.includes('bank_acc')) {
+    return str.length > 4 ? `****${str.slice(-4)}` : '****';
+  }
+
+  // Bearer Token detection in generic strings
+  if (str.startsWith('Bearer ') || str.startsWith('re_') || str.startsWith('EAAB')) {
+    return '[REDACTED_TOKEN]';
+  }
+
+  return str;
+}
 
 // Ensure logs directory exists
 if (!fs.existsSync(LOGS_DIR)) {
@@ -55,7 +93,9 @@ export interface StructuredLogEntry {
  * Sanitize sensitive data from context objects
  */
 function sanitizeContext(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
+  if (!obj || typeof obj !== 'object') {
+    return typeof obj === 'string' ? sanitizeStringValue(obj, '') : obj;
+  }
   if (Array.isArray(obj)) return obj.map(sanitizeContext);
 
   const clean: Record<string, any> = {};
@@ -63,10 +103,8 @@ function sanitizeContext(obj: any): any {
     const lowerKey = key.toLowerCase();
     if (SENSITIVE_KEYS.has(lowerKey)) {
       clean[key] = '[REDACTED]';
-    } else if (lowerKey.includes('passport') || lowerKey.includes('id_number') || lowerKey.includes('tax_id')) {
-      // Mask ID to last 4 chars for FCRA audit trail safety
-      const strVal = String(val);
-      clean[key] = strVal.length > 4 ? `***-***-${strVal.slice(-4)}` : '***';
+    } else if (typeof val === 'string') {
+      clean[key] = sanitizeStringValue(val, key);
     } else if (typeof val === 'object' && val !== null) {
       clean[key] = sanitizeContext(val);
     } else {

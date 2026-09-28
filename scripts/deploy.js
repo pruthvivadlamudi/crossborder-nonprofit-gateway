@@ -34,9 +34,36 @@ async function deploy() {
       console.log(`   ...and ${status.changedFiles.length - 8} more file(s)`);
     }
 
-    // 1. Build Verification
-    console.log('\n🔨 [1/3] Verifying TypeScript build & asset compilation...');
     const isWin = process.platform === 'win32';
+
+    // 1. Secret & PII Leak Scanner
+    console.log('\n🔒 [1/4] Running Deep Secret & PII Exposure Scan...');
+    const scanResult = spawnSync(isWin ? 'cmd.exe' : 'npm', isWin ? ['/c', 'npm', 'run', 'scan:secrets'] : ['run', 'scan:secrets'], {
+      cwd: path.resolve(__dirname, '..'),
+      stdio: 'inherit'
+    });
+
+    if (scanResult.status !== 0) {
+      console.error('\n❌ Secret or sensitive PII detected! Aborting deploy to prevent exposure.');
+      process.exit(1);
+    }
+    console.log('✅ Zero leaked secrets detected.');
+
+    // 2. Automated Test Suite Verification
+    console.log('\n🧪 [2/4] Executing Jest Unit & Integration Test Suite...');
+    const testResult = spawnSync(isWin ? 'cmd.exe' : 'npm', isWin ? ['/c', 'npm', 'test'] : ['test'], {
+      cwd: path.resolve(__dirname, '..'),
+      stdio: 'inherit'
+    });
+
+    if (testResult.status !== 0) {
+      console.error('\n❌ Test suite failed! Aborting deploy to prevent regression.');
+      process.exit(1);
+    }
+    console.log('✅ All tests passed cleanly.');
+
+    // 3. Build Verification
+    console.log('\n🔨 [3/4] Verifying TypeScript build & asset compilation...');
     const buildResult = spawnSync(isWin ? 'cmd.exe' : 'npm', isWin ? ['/c', 'npm', 'run', 'build'] : ['run', 'build'], {
       cwd: path.resolve(__dirname, '..'),
       stdio: 'inherit'
@@ -48,8 +75,8 @@ async function deploy() {
     }
     console.log('✅ Build verification passed.');
 
-    // 2. Stage & Commit
-    console.log('\n📦 [2/3] Staging and committing changes...');
+    // 4. Stage & Commit
+    console.log('\n📦 [4/4] Staging, committing and pushing changes...');
     stageAll();
     const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
     const commitMsg = customMessage || `deploy: real-time update [${timestamp}]`;

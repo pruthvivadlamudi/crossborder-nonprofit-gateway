@@ -1,4 +1,4 @@
-name: Security Audit & Automated Vulnerability Scan
+name: Security Audit, Testing Suite & Automated Safeguards
 
 on:
   push:
@@ -11,8 +11,8 @@ on:
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab anytime
 
 jobs:
-  security-scan:
-    name: Dependency Vulnerability Audit & Build Verification
+  security-and-qa:
+    name: Rigorous Security & QA Pipeline
     runs-on: ubuntu-latest
 
     steps:
@@ -25,11 +25,23 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm install
+      - name: Install Production & Dev Dependencies
+        run: npm ci
 
-      - name: Run Security Audit
-        run: npm audit --audit-level=high
+      - name: 1. Deep Secret & PII Exposure Scan
+        run: npm run scan:secrets
 
-      - name: Verify TypeScript Production Build
+      - name: 2. Dependency Vulnerability Audit
+        run: npm run audit:check
+
+      - name: 3. Core Unit & Integration Testing Suite (Jest)
+        run: npm test
+
+      - name: 4. Install Playwright Headless Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: 5. End-to-End Donor Journey Testing Suite (Playwright)
+        run: npm run test:e2e
+
+      - name: 6. Verify Production TypeScript Build
         run: npm run build

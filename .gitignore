@@ -44,3 +44,8 @@ yarn-error.log*
 # Confidential Institutional & Personal Records (Local Only)
 docs/institutional-records/
 docs/institutional-records/**
+
+# Test Coverage & Automation Reports
+coverage/
+playwright-report/
+test-results/
