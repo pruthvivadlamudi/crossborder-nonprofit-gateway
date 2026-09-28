@@ -765,7 +765,8 @@ async function logResetEmailDispatch(
   provider: string,
   status: string,
   messageId?: string,
-  errorMessage?: string
+  errorMessage?: string,
+  orderId: string = 'PASSWORD_RESET'
 ): Promise<void> {
   try {
     await dbQuery(`
@@ -774,7 +775,7 @@ async function logResetEmailDispatch(
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [
       uuidv4(),
-      'PASSWORD_RESET',
+      orderId,
       email,
       provider,
       status,
@@ -785,4 +786,287 @@ async function logResetEmailDispatch(
     logger.warn(`Could not record password reset email dispatch log: ${e.message}`, { error: e.message }, 'EMAIL_AUDIT');
   }
 }
+
+/**
+ * Dynamic Branded HTML Email Template for Password Changed Security Alert
+ * Follows Divya Yoga Mandali & The Art Of Relaxation visual brand identity
+ */
+export function renderPasswordChangedAlertEmailHtml(
+  adminEmail: string,
+  adminName: string,
+  changeTimestamp: string,
+  clientIp: string,
+  urgentResetLink: string
+): string {
+  const safeName = escapeHtml(adminName || 'Revered Trustee');
+  const safeEmail = escapeHtml(adminEmail);
+  const safeTime = escapeHtml(changeTimestamp);
+  const safeIp = escapeHtml(clientIp || 'Unknown IP');
+  const safeLink = escapeHtml(urgentResetLink);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Alert: Trustee Passcode Changed - Divya Yoga Mandali</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0b111e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .mobile-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 32px 12px; background-color: #0b111e;">
+
+  <center>
+    <!-- Outer Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Alert Header -->
+      <tr>
+        <td align="center" style="padding: 26px 20px; background-color: #080c14; border-bottom: 3px solid #10b981; border-radius: 12px 12px 0 0;">
+          <div style="color: #34d399; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">
+            ॥ सेवा परमो धर्मः ॥ • ADMINISTRATIVE SECURITY NOTIFICATION
+          </div>
+          <h1 style="color: #ffffff; font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em;">
+            Divya Yoga Mandali & The Art Of Relaxation
+          </h1>
+          <div style="color: #94a3b8; font-size: 13px;">
+            Trustee Compliance Console Account Security Notice
+          </div>
+        </td>
+      </tr>
+
+      <!-- Main Body Card -->
+      <tr>
+        <td style="background-color: #ffffff; padding: 36px 30px; color: #1e293b;">
+          
+          <h2 style="color: #0f172a; font-size: 19px; font-weight: 700; margin: 0 0 14px;">
+            Your Trustee Passcode Has Been Changed
+          </h2>
+
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 18px;">
+            Namaste <strong>${safeName}</strong>,
+          </p>
+
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 22px;">
+            This is an automated confirmation that the administrative passcode for your account (<strong>${safeEmail}</strong>) was successfully updated.
+          </p>
+
+          <!-- Security Metadata Table -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; padding: 14px 18px;">
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Modification Time:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">${safeTime}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Client IP Address:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #0f172a; font-weight: 600; font-family: monospace; text-align: right;">${safeIp}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Security Invalidation:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #10b981; font-weight: 600; text-align: right;">All prior reset tokens wiped</td>
+            </tr>
+          </table>
+
+          <!-- Positive confirmation -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+            <tr>
+              <td style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #10b981; border-radius: 8px; padding: 14px 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 4px;">
+                  ✓ Did you perform this change?
+                </div>
+                <div style="font-size: 13px; color: #15803d; line-height: 1.5;">
+                  You can safely disregard this message. Your new credentials are fully active and protected. No further action is necessary.
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Warning for unauthorized change -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #991b1b; margin-bottom: 4px;">
+                  ⚠️ Did you NOT make this change?
+                </div>
+                <div style="font-size: 13px; color: #b91c1c; line-height: 1.5; margin-bottom: 12px;">
+                  If you did not authorize this passcode update, your account may have been compromised. Click the button below immediately to re-secure your access:
+                </div>
+                <a href="${safeLink}" target="_blank" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 700; font-size: 13px; letter-spacing: 0.02em;">
+                  🚨 Emergency Re-Secure & Reset Passcode
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Fallback Link -->
+          <div style="font-size: 12px; color: #64748b; line-height: 1.5; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            Direct portal link: <a href="${safeLink}" target="_blank" style="color: #0284c7; word-break: break-all;">${safeLink}</a>
+          </div>
+
+        </td>
+      </tr>
+
+      <!-- Regulatory & Trust Footer -->
+      <tr>
+        <td style="background-color: #080c14; padding: 22px 24px; border-radius: 0 0 12px 12px; font-size: 11px; color: #94a3b8; line-height: 1.6; text-align: center;">
+          <p style="margin: 0 0 6px; color: #cbd5e1; font-weight: 600;">
+            Divya Yoga Mandali Charitable Trust (DYMCT) & The Art Of Relaxation (AOR)
+          </p>
+          <p style="margin: 0; color: #64748b;">
+            Managing Trustee: Sri Pratap Maharaj • Regulatory Non-Profit Gateway
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </center>
+
+</body>
+</html>`;
+}
+
+/**
+ * Dispatch Password Changed Security Alert Email via Multi-Provider Engine
+ * (Resend -> Brevo -> SendGrid -> Simulation)
+ */
+export async function sendPasswordChangedAlertEmail(
+  adminEmail: string,
+  adminName: string,
+  clientIp: string,
+  urgentResetLink: string,
+  correlationId?: string
+): Promise<EmailDispatchResult> {
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'onboarding@resend.dev').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Security Alert').trim().replace(/^['"]|['"]$/g, '');
+  const subject = `Security Alert: Trustee Passcode Changed - Divya Yoga Mandali`;
+  const timestamp = new Date().toUTCString();
+  const htmlContent = renderPasswordChangedAlertEmailHtml(adminEmail, adminName, timestamp, clientIp, urgentResetLink);
+
+  // 1. Resend Provider
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
+  if (resendApiKey && !resendApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [adminEmail],
+          subject,
+          html: htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'resend', messageId: responseBody.id };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via Resend', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 2. Brevo Provider
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: adminEmail, name: adminName }],
+          subject,
+          htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Brevo API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', responseBody.messageId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via Brevo`, { messageId: responseBody.messageId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: responseBody.messageId };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via Brevo', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'brevo', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 3. SendGrid Provider
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
+  if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: adminEmail, name: adminName }] }],
+          from: { email: fromEmail, name: fromName },
+          subject,
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`SendGrid API returned ${res.status}: ${errText}`);
+      }
+
+      const msgId = `sg-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', msgId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via SendGrid`, { messageId: msgId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: msgId };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via SendGrid', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 4. Simulation Mode
+  const simMessageId = `SIM-ALERT-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  logger.info(`[SIMULATION MODE] Generated password changed alert email for ${adminEmail}`, {
+    adminEmail,
+    adminName,
+    clientIp,
+    urgentResetLink,
+    simulatedMessageId: simMessageId
+  }, 'EMAIL_SIMULATION', correlationId);
+
+  await logResetEmailDispatch(adminEmail, 'simulation', 'SUCCESS', simMessageId, undefined, 'PASSWORD_CHANGED_ALERT');
+  return {
+    success: true,
+    provider: 'simulation',
+    messageId: simMessageId,
+    renderedHtml: htmlContent
+  };
+}
+
 

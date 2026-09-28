@@ -24,7 +24,8 @@ import {
   sendDonationConfirmationEmail,
   DonationEmailData,
   renderDonationEmailHtml,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  sendPasswordChangedAlertEmail
 } from './email';
 import {
   timingSafeStringCompare,
@@ -1454,6 +1455,17 @@ app.post('/api/admin/reset-password', resetPasswordLimiter, async (req: Request,
   await updateAdminPasswordAndClearToken(admin.id, newHash);
 
   logger.info('Admin password reset successfully executed and token invalidated', { adminId: admin.id, email: maskEmail(admin.email) }, 'PASSWORD_RESET_SUCCESS', correlationId);
+
+  // Dispatch post-password-change confirmation security alert email asynchronously
+  const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:10000';
+  const baseUrl = `${protocol}://${host}`;
+  const urgentResetLink = `${baseUrl}/admin.html#view=forgot`;
+  const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || '127.0.0.1';
+
+  sendPasswordChangedAlertEmail(admin.email, admin.full_name, clientIp, urgentResetLink, correlationId).catch(err => {
+    logger.error('Failed to dispatch password changed security alert email', err, { email: admin.email }, correlationId);
+  });
 
   return res.status(200).json({
     success: true,

@@ -1352,6 +1352,12 @@
       return;
     }
 
+    if (hash.includes('view=forgot') || new URLSearchParams(search).get('view') === 'forgot') {
+      showAuthGate();
+      showAuthView('forgot');
+      return;
+    }
+
     // Bind workspace tabs
     const tabAdmin = document.getElementById('tab-btn-admin');
     const tabDonor = document.getElementById('tab-btn-donor');

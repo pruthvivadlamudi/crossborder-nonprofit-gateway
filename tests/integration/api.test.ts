@@ -300,6 +300,14 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
       expect(replayRes.status).toBe(400);
       expect(replayRes.body.error).toContain('invalid, expired, or has already been used');
 
+      // Verify that post-reset security confirmation alert email was recorded
+      const alertLogs = await dbQuery(`
+        SELECT * FROM email_dispatch_logs 
+        WHERE order_id = 'PASSWORD_CHANGED_ALERT' AND donor_email = $1
+      `, [adminEmail]);
+      expect(alertLogs.rows.length).toBeGreaterThan(0);
+      expect(alertLogs.rows[0].status).toBe('SUCCESS');
+
       // 5. Authenticate with newly set password
       const newLoginRes = await request(app)
         .post('/api/admin/login')
