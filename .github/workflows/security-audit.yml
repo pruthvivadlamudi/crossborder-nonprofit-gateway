@@ -37,11 +37,11 @@ jobs:
       - name: 3. Core Unit & Integration Testing Suite (Jest)
         run: npm test
 
-      - name: 4. Install Playwright Headless Browsers
+      - name: 4. Verify Production TypeScript Build & Compile Assets
+        run: npm run build
+
+      - name: 5. Install Playwright Headless Browsers
         run: npx playwright install --with-deps chromium
 
-      - name: 5. End-to-End Donor Journey Testing Suite (Playwright)
+      - name: 6. End-to-End Donor Journey Testing Suite (Playwright)
         run: npm run test:e2e
-
-      - name: 6. Verify Production TypeScript Build
-        run: npm run build

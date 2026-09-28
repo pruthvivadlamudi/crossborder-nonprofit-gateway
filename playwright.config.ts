@@ -10,14 +10,14 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   webServer: {
-    command: 'node dist/server.js',
+    command: 'npm run build && node dist/server.js',
     url: 'http://127.0.0.1:3005/api/health',
     reuseExistingServer: true,
     env: {
       PORT: '3005',
       NODE_ENV: 'production'
     },
-    timeout: 15 * 1000
+    timeout: 30 * 1000
   },
   use: {
     baseURL: 'http://127.0.0.1:3005',
