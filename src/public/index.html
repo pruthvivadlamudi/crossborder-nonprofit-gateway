@@ -1002,8 +1002,8 @@
         
         <!-- PAYPAL SECTION (Visible when in PayPal Mode) -->
         <div id="paypal-section">
-          <!-- Direct 1-Click PayPal Donate Button -->
-          <a id="btn-paypal-direct" href="/donate/paypal?trust=divya&amount=50" target="_blank" class="btn-submit-donation" style="display: flex; align-items: center; justify-content: center; gap: 10px; text-decoration: none; margin-bottom: 14px; background: linear-gradient(135deg, #0070ba, #003087); box-shadow: 0 6px 20px rgba(0, 112, 186, 0.4); padding: 15px; font-size: 1.05rem;">
+          <!-- Direct 1-Click PayPal Donate Button (Fallback if Smart Buttons not loaded) -->
+          <a id="btn-paypal-direct" href="/donate/paypal?trust=divya&amount=50" target="_blank" class="btn-submit-donation" style="display: none; align-items: center; justify-content: center; gap: 10px; text-decoration: none; margin-bottom: 14px; background: linear-gradient(135deg, #0070ba, #003087); box-shadow: 0 6px 20px rgba(0, 112, 186, 0.4); padding: 15px; font-size: 1.05rem;">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M20.067 8.478c.492.88.556 2.014.3 3.327-.74 3.806-3.27 5.922-7.14 5.922h-1.638a.936.936 0 0 0-.923.791l-.963 6.09-.272 1.722a.468.468 0 0 1-.462.395H4.8a.468.468 0 0 1-.463-.541L7.42 2.684a.936.936 0 0 1 .923-.791h6.643c2.723 0 4.675.617 5.081 2.585z"/></svg>
             <span>🚀 Donate with PayPal (<span class="display-amount">$50.00 USD</span>)</span>
           </a>
@@ -1441,6 +1441,8 @@
         loadPayPalSDK(data.clientId);
       } else {
         document.getElementById('paypal-button-container').innerHTML = '';
+        const btnDirect = document.getElementById('btn-paypal-direct');
+        if (btnDirect) btnDirect.style.display = 'flex';
       }
       updatePaymentUrlsAndQrs();
     } catch (e) {
@@ -1478,6 +1480,8 @@
     script.onerror = (err) => {
       console.error('Failed to load PayPal SDK:', err);
       loadingElem.style.display = 'none';
+      const btnDirect = document.getElementById('btn-paypal-direct');
+      if (btnDirect) btnDirect.style.display = 'flex';
     };
     document.head.appendChild(script);
   }
@@ -1486,9 +1490,14 @@
     const container = document.getElementById('paypal-button-container');
     container.innerHTML = '';
 
+    const btnDirect = document.getElementById('btn-paypal-direct');
+
     if (!window.paypal || !window.paypal.Buttons) {
+      if (btnDirect) btnDirect.style.display = 'flex';
       return;
     }
+
+    if (btnDirect) btnDirect.style.display = 'none';
 
     window.paypal.Buttons({
       style: {

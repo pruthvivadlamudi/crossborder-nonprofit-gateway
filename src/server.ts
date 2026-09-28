@@ -104,6 +104,8 @@ app.use(helmet({
       upgradeInsecureRequests: null
     }
   },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
   crossOriginEmbedderPolicy: false
 }));
