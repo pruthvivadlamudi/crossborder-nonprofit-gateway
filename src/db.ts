@@ -136,7 +136,8 @@ export async function initDatabase(): Promise<void> {
   }
 
   // SQLite Fallback with Redundancy & Crash Protection
-  dbFilePath = path.join(__dirname, '..', 'donations.sqlite');
+  const dbName = process.env.NODE_ENV === 'test' ? 'donations.test.sqlite' : 'donations.sqlite';
+  dbFilePath = path.join(__dirname, '..', dbName);
   sqliteDb = await open({
     filename: dbFilePath,
     driver: sqlite3.Database
@@ -484,16 +485,28 @@ export async function seedDefaultAdminUser(): Promise<void> {
     const existing = await dbQuery(`SELECT COUNT(*) as count FROM admin_users`);
     const count = parseInt(existing.rows[0]?.count || '0', 10);
     if (count === 0) {
+      // Check if we have a persisted credentials backup
+      let persistedHash: string | null = null;
+      const credsPath = path.join(__dirname, '..', '.admin_credentials.json');
+      if (fs.existsSync(credsPath)) {
+        try {
+          const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+          if (creds.password_hash) {
+            persistedHash = creds.password_hash;
+          }
+        } catch {}
+      }
+
       const defaultEmail = (process.env.ADMIN_EMAIL || 'pratapmaharaj9@gmail.com').toLowerCase().trim();
       const defaultPassword = process.env.ADMIN_PASSWORD || 'Trustee@2026!';
-      const defaultHash = await hashPassword(defaultPassword);
+      const defaultHash = persistedHash || await hashPassword(defaultPassword);
       const defaultId = crypto.randomUUID();
 
       await dbQuery(`
         INSERT INTO admin_users (id, email, password_hash, role, full_name)
         VALUES ($1, $2, $3, $4, $5)
       `, [defaultId, defaultEmail, defaultHash, 'SUPER_ADMIN', 'Sri Pratap Maharaj']);
-      logger.info(`Seeded default admin user into database: ${defaultEmail}`, { email: defaultEmail }, 'DB_SEED');
+      logger.info(`Seeded default admin user into database: ${defaultEmail}`, { email: defaultEmail, usedPersisted: Boolean(persistedHash) }, 'DB_SEED');
     }
   } catch (err: any) {
     logger.warn(`Admin seed check warning: ${err.message}`, { error: err.message }, 'DB_SEED');
@@ -578,6 +591,16 @@ export async function updateAdminPasswordAndClearToken(
     SET password_hash = $1, reset_token = NULL, reset_token_expiry = NULL, updated_at = CURRENT_TIMESTAMP
     WHERE id = $2
   `, [newPasswordHash, adminId]);
+
+  // Persist backup of the updated admin hash so container restarts or SQLite re-seeds don't wipe it
+  try {
+    const credsPath = path.join(__dirname, '..', '.admin_credentials.json');
+    fs.writeFileSync(credsPath, JSON.stringify({
+      adminId,
+      password_hash: newPasswordHash,
+      updated_at: new Date().toISOString()
+    }), 'utf8');
+  } catch {}
 
   return true;
 }

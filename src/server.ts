@@ -250,10 +250,10 @@ app.post('/admin.html', (req: Request, res: Response) => {
   res.redirect('/admin.html');
 });
 
-// Direct PayPal Redirect Route for QR Codes & 1-Click Redirects
+// Direct PayPal Redirect Route for QR Codes & 1-Click Redirects (Supports Open Any-Amount)
 app.get('/donate/paypal', (req: Request, res: Response) => {
   const trustId = (req.query.trust as string) || 'divya';
-  const amount = parseFloat(req.query.amount as string) || 50;
+  const amountStr = req.query.amount as string;
   const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
   const merchantEmail = profile.merchantEmail || 'pratapmaharaj9@gmail.com';
 
@@ -262,28 +262,40 @@ app.get('/donate/paypal', (req: Request, res: Response) => {
     : process.env.PAYPAL_DIVYA_DIRECT_URL;
 
   if (customUrl) {
-    const separator = customUrl.includes('?') ? '&' : '?';
-    return res.redirect(`${customUrl}${separator}amount=${amount.toFixed(2)}`);
+    if (amountStr && !isNaN(parseFloat(amountStr))) {
+      const separator = customUrl.includes('?') ? '&' : '?';
+      return res.redirect(`${customUrl}${separator}amount=${parseFloat(amountStr).toFixed(2)}`);
+    }
+    return res.redirect(customUrl);
   }
 
   // Official universal PayPal donation redirect
-  const paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(merchantEmail)}&item_name=${encodeURIComponent(profile.name)}&currency_code=USD&amount=${amount.toFixed(2)}`;
+  // If NO amount is specified, do NOT append &amount= so PayPal shows an open input field allowing the donor to choose their amount!
+  let paypalUrl = `https://www.paypal.com/donate/?business=${encodeURIComponent(merchantEmail)}&item_name=${encodeURIComponent(profile.name)}&currency_code=USD`;
+  if (amountStr && !isNaN(parseFloat(amountStr)) && parseFloat(amountStr) > 0) {
+    paypalUrl += `&amount=${parseFloat(amountStr).toFixed(2)}`;
+  }
   return res.redirect(paypalUrl);
 });
 
-// Direct UPI Redirect / Mobile Launcher Route for QR Codes & 1-Click Redirects
+// Direct UPI Redirect / Mobile Launcher Route for QR Codes & 1-Click Redirects (Supports Open Any-Amount)
 app.get('/donate/upi', (req: Request, res: Response) => {
   const trustId = (req.query.trust as string) || 'divya';
-  const amount = parseFloat(req.query.amount as string) || 1000;
+  const amountStr = req.query.amount as string;
+  const amount = (amountStr && !isNaN(parseFloat(amountStr)) && parseFloat(amountStr) > 0) ? parseFloat(amountStr) : null;
   const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
   const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
   const payeeName = profile.name;
   const note = `Seva Contribution - ${profile.name}`.slice(0, 50);
 
-  const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  const gpayUri = `tez://upi/pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  const phonepeUri = `phonepe://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
-  const paytmUri = `paytmmp://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+  // If amount is specified, include &am=; if omitted, leave open so donor enters amount in their UPI app
+  const amParam = amount ? `&am=${amount.toFixed(2)}` : '';
+  const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}${amParam}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const gpayUri = `tez://upi/pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}${amParam}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const phonepeUri = `phonepe://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}${amParam}&cu=INR&tn=${encodeURIComponent(note)}`;
+  const paytmUri = `paytmmp://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(payeeName)}${amParam}&cu=INR&tn=${encodeURIComponent(note)}`;
+
+  const amountDisplay = amount ? `₹${amount.toLocaleString('en-IN')} INR` : '✨ Open Contribution (Choose Any Amount)';
 
   // Return a mobile-optimized launcher page that triggers the UPI intent and gives 1-tap app buttons
   res.send(`<!DOCTYPE html>
@@ -298,7 +310,7 @@ app.get('/donate/upi', (req: Request, res: Response) => {
     .card { background: #0f172a; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 20px; padding: 28px 20px; max-width: 420px; margin: 0 auto; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
     .badge { display: inline-block; background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 0.75rem; font-weight: 700; padding: 4px 12px; border-radius: 9999px; margin-bottom: 12px; }
     h2 { font-size: 1.25rem; margin-bottom: 6px; }
-    .amount { font-size: 1.8rem; font-weight: 800; color: #38bdf8; margin: 12px 0; }
+    .amount { font-size: 1.4rem; font-weight: 800; color: #38bdf8; margin: 12px 0; }
     .btn { display: block; padding: 13px; margin: 10px 0; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 0.95rem; color: white; transition: opacity 0.2s; }
     .btn:hover { opacity: 0.9; }
     .btn-upi { background: linear-gradient(135deg, #10b981, #059669); }
@@ -313,7 +325,7 @@ app.get('/donate/upi', (req: Request, res: Response) => {
   <div class="card">
     <div class="badge">॥ Vasudhaiva Kutumbakam ॥</div>
     <h2>${payeeName}</h2>
-    <div class="amount">₹${amount.toLocaleString('en-IN')} INR</div>
+    <div class="amount">${amountDisplay}</div>
     <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 20px;">Launching UPI payment on your device...</p>
     <a href="${standardUpiUri}" class="btn btn-upi">📱 Launch Any UPI App</a>
     <a href="${gpayUri}" class="btn btn-gpay">📱 Open in Google Pay</a>
@@ -1297,6 +1309,14 @@ app.post('/api/admin/login', authLimiter, async (req: Request, res: Response) =>
   if (adminUser && adminUser.password_hash) {
     // Strong cryptographic verification using bcrypt
     isMatch = await verifyPassword(password, adminUser.password_hash);
+    // If database hash check failed, check if password matches current ADMIN_PASSWORD from .env / Render config
+    // This allows the trustee to set a custom ADMIN_PASSWORD in Render environment variables anytime to regain/override access
+    if (!isMatch && ADMIN_PASSWORD && timingSafeStringCompare(password, ADMIN_PASSWORD)) {
+      isMatch = true;
+      // Automatically sync the new password into the database hash
+      const newHash = await hashPassword(password);
+      await updateAdminPasswordAndClearToken(adminUser.id, newHash);
+    }
   } else {
     // Legacy fallback comparison to ADMIN_PASSWORD in environment
     isMatch = timingSafeStringCompare(password, ADMIN_PASSWORD);

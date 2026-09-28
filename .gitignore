@@ -8,6 +8,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.admin_credentials.json
 
 # Database Files & SQLite WAL
 *.sqlite

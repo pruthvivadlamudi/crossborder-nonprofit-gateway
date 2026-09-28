@@ -1017,13 +1017,13 @@
           <!-- Streamlined Direct PayPal QR Code Standee Card -->
           <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid var(--gold-border); border-radius: 16px; padding: 16px 14px; text-align: center; margin-top: 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
             <div style="display: inline-block; background: rgba(245, 158, 11, 0.15); color: #fbbf24; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 8px;">
-              ⚡ Instant Phone Camera Scan
+              ⚡ Open Any-Amount Camera Scan
             </div>
             <h4 style="font-size: 0.98rem; font-weight: 700; color: #ffffff; margin-bottom: 4px;">
               Direct PayPal Camera QR Code
             </h4>
             <p style="font-size: 0.76rem; color: #94a3b8; margin-bottom: 10px;">
-              Scan with phone camera to open official PayPal checkout
+              Scan with phone camera to donate any amount of your choice directly
             </p>
 
             <div style="background: #ffffff; padding: 12px 10px 8px; border-radius: 14px; display: inline-block; margin-bottom: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.5);">
@@ -1032,13 +1032,13 @@
               </div>
               <img id="paypal-qr-image" src="" alt="PayPal Direct QR" style="width: 170px; height: 170px; display: block; margin: 0 auto; border-radius: 4px;">
               <div id="paypal-qr-amount-caption" style="margin-top: 6px; font-size: 0.76rem; color: #0284c7; font-weight: 700;">
-                Amount: $50.00 USD
+                ✨ Open Contribution (Choose Any Amount)
               </div>
             </div>
 
             <div>
-              <a id="btn-paypal-direct-link" href="/donate/paypal?trust=divya&amount=50" target="_blank" class="action-btn" style="display: inline-flex; justify-content: center; font-size: 0.8rem; padding: 8px 16px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">
-                ↗ Open PayPal Page Directly in Browser
+              <a id="btn-paypal-direct-link" href="/donate/paypal?trust=divya" target="_blank" class="action-btn" style="display: inline-flex; justify-content: center; font-size: 0.8rem; padding: 8px 16px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3);">
+                ↗ Open Official PayPal Page (Choose Amount)
               </a>
             </div>
           </div>
@@ -1668,9 +1668,8 @@
     const p = activeTrustConfig?.profile;
     const trustName = p?.name || (currentTrustId === 'relaxation' ? 'The Art Of Relaxation' : 'Divya Yoga Mandali Charitable Trust');
 
-    // 1. Synchronize PayPal Direct Links & Standee QR
-    const usdAmount = currentPaymentMethod === 'paypal' ? (selectedAmount || 50) : 50;
-    const paypalDirectUrl = `${window.location.origin}/donate/paypal?trust=${currentTrustId}&amount=${usdAmount}`;
+    // 1. Synchronize PayPal Direct Links & Standee QR (Always Open Any-Amount)
+    const paypalDirectUrl = `${window.location.origin}/donate/paypal?trust=${currentTrustId}`;
 
     const btnDirect = document.getElementById('btn-paypal-direct');
     if (btnDirect) btnDirect.href = paypalDirectUrl;
@@ -1679,6 +1678,7 @@
     if (btnDirectLink) btnDirectLink.href = paypalDirectUrl;
 
     document.querySelectorAll('.display-amount').forEach(el => {
+      const usdAmount = currentPaymentMethod === 'paypal' ? (selectedAmount || 50) : 50;
       el.textContent = `$${usdAmount.toFixed(2)} USD`;
     });
 
@@ -1689,7 +1689,7 @@
 
     const paypalQrCaption = document.getElementById('paypal-qr-amount-caption');
     if (paypalQrCaption) {
-      paypalQrCaption.textContent = `Amount: $${usdAmount.toFixed(2)} USD`;
+      paypalQrCaption.textContent = '✨ Open Contribution (Choose Any Amount)';
     }
 
     const paypalQrTrust = document.getElementById('paypal-qr-trust-name');
@@ -1908,20 +1908,18 @@
     const modalDirectBtn = document.getElementById('modal-direct-btn');
 
     if (isPaypal) {
-      const amount = selectedAmount && currentPaymentMethod === 'paypal' ? selectedAmount : 50;
-      const directUrl = `${window.location.origin}/donate/paypal?trust=${currentTrustId}&amount=${amount}`;
+      const directUrl = `${window.location.origin}/donate/paypal?trust=${currentTrustId}`;
       document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(directUrl)}`;
-      document.getElementById('qr-scan-instruction').textContent = 'Scan with Phone Camera to Open PayPal Directly';
+      document.getElementById('qr-scan-instruction').textContent = 'Scan with Phone Camera to Donate Any Amount Directly';
       modalDirectBtn.href = directUrl;
-      modalDirectBtn.textContent = '↗ Open PayPal Page Directly';
+      modalDirectBtn.textContent = '↗ Open Official PayPal (Choose Amount)';
     } else {
-      const amount = selectedAmount && currentPaymentMethod === 'upi' ? selectedAmount : 1000;
       const vpa = p?.upiVpa || (currentTrustId === 'relaxation' ? 'artofrelaxation@kvb' : 'divyayoga.mandali@sbi');
       const note = `Seva Contribution - ${trustName}`.slice(0, 50);
-      const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(trustName)}&am=${amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
+      const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(trustName)}&cu=INR&tn=${encodeURIComponent(note)}`;
       document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(standardUpiUri)}`;
-      document.getElementById('qr-scan-instruction').textContent = 'Scan with GPay, PhonePe, Paytm, or any UPI App';
-      modalDirectBtn.href = `${window.location.origin}/donate/upi?trust=${currentTrustId}&amount=${amount}`;
+      document.getElementById('qr-scan-instruction').textContent = 'Scan with GPay, PhonePe, Paytm (Choose Any Amount)';
+      modalDirectBtn.href = `${window.location.origin}/donate/upi?trust=${currentTrustId}`;
       modalDirectBtn.textContent = '📱 Launch in UPI App';
     }
   }
