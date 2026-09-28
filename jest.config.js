@@ -12,7 +12,14 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
-      tsconfig: 'tsconfig.json'
+      tsconfig: {
+        target: 'ES2022',
+        module: 'CommonJS',
+        strict: true,
+        esModuleInterop: true,
+        skipLibCheck: true,
+        types: ['node', 'jest']
+      }
     }]
   }
 };
