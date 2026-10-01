@@ -182,7 +182,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
             <tr>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Beneficiary VPA:</td>
               <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #0284c7; font-weight: 600;">
-                ${escapeHtml(data.upiVpa || 'charity.seva@sbi')}
+                ${escapeHtml(data.upiVpa || '9553946629-2@axl')}
               </td>
             </tr>
             ` : ''}

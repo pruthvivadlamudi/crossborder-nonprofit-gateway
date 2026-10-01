@@ -3,7 +3,7 @@ TITLE FinTech Cross-Border Non-Profit Engine
 COLOR 0A
 
 echo ========================================================
-echo   Cross-Border Donation & FCRA Compliance Platform
+echo   Cross-Border Donation ^& FCRA Compliance Platform
 echo   Multi-Trust Regulatory Gateway Engine
 echo ========================================================
 echo.

@@ -109,6 +109,8 @@ describe('Security & DPDP Compliance Suite', () => {
 
   describe('UPI & Tax Identifier Validation', () => {
     it('should validate valid Indian NPCI UPI VPAs', () => {
+      expect(validateUpiVpa('9553946629-2@axl')).toBe(true);
+      expect(validateUpiVpa('9553946629-3@axl')).toBe(true);
       expect(validateUpiVpa('divyayoga.mandali@sbi')).toBe(true);
       expect(validateUpiVpa('artofrelaxation@kvb')).toBe(true);
       expect(validateUpiVpa('donor@okaxis')).toBe(true);

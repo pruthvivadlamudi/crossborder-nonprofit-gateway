@@ -284,7 +284,7 @@ app.get('/donate/upi', (req: Request, res: Response) => {
   const amountStr = req.query.amount as string;
   const amount = (amountStr && !isNaN(parseFloat(amountStr)) && parseFloat(amountStr) > 0) ? parseFloat(amountStr) : null;
   const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
-  const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
+  const vpa = profile.upiVpa || '9553946629-2@axl';
   const payeeName = profile.name;
   const note = `Seva Contribution - ${profile.name}`.slice(0, 50);
 
@@ -354,7 +354,7 @@ const WEBHOOK_ID = process.env.PAYPAL_WEBHOOK_ID || '';
 const TRUST_PROFILES: Record<string, any> = {
   divya: {
     id: 'divya',
-    name: process.env.PRIMARY_TRUST_NAME || 'Divya Yoga Mandali Charitable Trust',
+    name: process.env.PRIMARY_TRUST_NAME || 'Divya Yoga Mandal Charitable Trust',
     subtitle: 'Vedic Wellness, Yoga Sadhana, Annadanam & Rural Community Upliftment',
     tagline: 'Empowering communities through holistic yoga, wholesome nutrition, and rural healthcare seva.',
     mission: 'Dedicated to reviving traditional yoga and holistic wellness, offering free wholesome nutrition (Annadanam), providing free rural healthcare seva, and fostering cultural preservation across communities.',
@@ -365,7 +365,7 @@ const TRUST_PROFILES: Record<string, any> = {
     bankBranch: process.env.PRIMARY_BANK_BRANCH || 'Boduppal Branch, Hyderabad',
     ifsc: process.env.PRIMARY_BANK_IFSC || 'SBIN0021465',
     accountMasked: process.env.PRIMARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...4651',
-    upiVpa: process.env.PRIMARY_UPI_VPA || 'divyayoga.mandali@sbi',
+    upiVpa: process.env.PRIMARY_UPI_VPA || '9553946629-2@axl',
     instagramHandle: process.env.INSTAGRAM_HANDLE || 'divyayoga.mandali',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
     fcraRole: 'Designated Non-Profit / FCRA Utilization Account',
@@ -411,7 +411,7 @@ const TRUST_PROFILES: Record<string, any> = {
     bankBranch: process.env.SECONDARY_BANK_BRANCH || 'Secunderabad Main Branch',
     ifsc: process.env.SECONDARY_BANK_IFSC || 'KVBL0001151',
     accountMasked: process.env.SECONDARY_BANK_ACCOUNT_MASKED || 'A/c ending in ...7999',
-    upiVpa: process.env.SECONDARY_UPI_VPA || 'artofrelaxation@kvb',
+    upiVpa: process.env.SECONDARY_UPI_VPA || '9553946629-3@axl',
     instagramHandle: process.env.INSTAGRAM_HANDLE || 'divyayoga.mandali',
     purposeCode: process.env.DEFAULT_PURPOSE_CODE || 'P1301',
     fcraRole: 'Associated Non-Profit Project Account',
@@ -998,7 +998,7 @@ app.post('/api/donations/upi/initiate', async (req: Request, res: Response) => {
     const encryptedPassport = passportOrId ? encryptPII(passportOrId.trim()) : null;
 
     const profile = TRUST_PROFILES[trustId] || TRUST_PROFILES.divya;
-    const vpa = profile.upiVpa || 'divyayoga.mandali@sbi';
+    const vpa = profile.upiVpa || '9553946629-2@axl';
     const payeeName = profile.name;
     const orderId = `UPI-${Date.now()}-${uuidv4().slice(0, 6).toUpperCase()}`;
     const idempotencyKey = `UPI-IDEM-${orderId}`;
@@ -1760,7 +1760,7 @@ app.get('/api/admin/transaction/:id', adminAuthMiddleware, async (req: Request, 
           { label: 'Currency Settlement & FX Conversion', value: 'Direct Domestic Settlement (1:1 INR - No Foreign Exchange Required)', type: 'conversion' },
           { label: 'Estimated Realized Bank Credit', value: `₹${realizedInr.toLocaleString('en-IN')}`, type: 'realized' },
           { label: 'Settlement Bank Account', value: `${profile.bankName} (${profile.accountMasked}, IFSC: ${profile.ifsc})`, type: 'destination' },
-          { label: 'Remittance Mode / Payee VPA', value: `${tx.payment_method || 'UPI'} (${tx.upi_vpa || profile.upiVpa || 'charity.seva@sbi'})`, type: 'statutory' },
+          { label: 'Remittance Mode / Payee VPA', value: `${tx.payment_method || 'UPI'} (${tx.upi_vpa || profile.upiVpa || '9553946629-2@axl'})`, type: 'statutory' },
           { label: 'Bank UTR / Transaction Reference', value: tx.upi_ref || tx.paypal_capture_id || tx.paypal_order_id, type: 'statutory' },
           { label: 'Statutory Regime / Tax Receipt', value: `${tx.fcra_financial_year} (Direct Domestic Charitable Seva)`, type: 'statutory' }
         ] : [

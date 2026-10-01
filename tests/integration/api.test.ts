@@ -89,7 +89,7 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
       expect(res.status).toBe(201);
       expect(res.body.orderId).toBeDefined();
       expect(res.body.idempotencyKey).toBeDefined();
-      expect(res.body.trustName).toContain('Divya Yoga Mandali');
+      expect(res.body.trustName).toContain('Divya Yoga Mandal');
     });
   });
 
@@ -111,7 +111,7 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.orderId).toBeDefined();
-      expect(res.body.vpa).toBe('artofrelaxation@kvb');
+      expect(res.body.vpa).toBe('9553946629-3@axl');
       expect(res.body.standardUpiUri).toContain('upi://pay?');
       expect(res.body.deepLinks.gpay).toBeDefined();
       expect(res.body.deepLinks.phonepe).toBeDefined();

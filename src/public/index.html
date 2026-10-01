@@ -1699,7 +1699,7 @@
 
     // 2. Synchronize UPI Deep Links, Payee VPA, & Dynamic UPI QR
     const inrAmount = currentPaymentMethod === 'upi' ? (selectedAmount || 1000) : 1000;
-    const vpa = p?.upiVpa || (currentTrustId === 'relaxation' ? 'artofrelaxation@kvb' : 'divyayoga.mandali@sbi');
+    const vpa = p?.upiVpa || (currentTrustId === 'relaxation' ? '9553946629-3@axl' : '9553946629-2@axl');
     const note = `Seva Contribution - ${trustName}`.slice(0, 50);
     const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(trustName)}&am=${inrAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(note)}`;
 
@@ -1821,8 +1821,8 @@
 
       const capData = await res.json();
       const p = activeTrustConfig?.profile;
-      const trustName = p?.name || 'Divya Yoga Mandali Charitable Trust';
-      const vpa = p?.upiVpa || 'divyayoga.mandali@sbi';
+      const trustName = p?.name || 'Divya Yoga Mandal Charitable Trust';
+      const vpa = p?.upiVpa || '9553946629-2@axl';
 
       document.getElementById('receipt-amount').textContent = `₹${Number(capData.gross).toLocaleString('en-IN')} INR`;
       document.getElementById('receipt-channel').textContent = '📱 UPI (Unified Payments Interface / India)';
@@ -1914,7 +1914,7 @@
       modalDirectBtn.href = directUrl;
       modalDirectBtn.textContent = '↗ Open Official PayPal (Choose Amount)';
     } else {
-      const vpa = p?.upiVpa || (currentTrustId === 'relaxation' ? 'artofrelaxation@kvb' : 'divyayoga.mandali@sbi');
+      const vpa = p?.upiVpa || (currentTrustId === 'relaxation' ? '9553946629-3@axl' : '9553946629-2@axl');
       const note = `Seva Contribution - ${trustName}`.slice(0, 50);
       const standardUpiUri = `upi://pay?pa=${encodeURIComponent(vpa)}&pn=${encodeURIComponent(trustName)}&cu=INR&tn=${encodeURIComponent(note)}`;
       document.getElementById('qr-image').src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(standardUpiUri)}`;
