@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "@types/jest": "^30.0.0",
     "@types/supertest": "^7.2.1",
     "jest": "^30.5.2",
