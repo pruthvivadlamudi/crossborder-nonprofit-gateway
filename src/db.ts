@@ -319,7 +319,7 @@ export async function dbQuery(sql: string, params: any[] = []): Promise<{ rows: 
  * Records transaction events to an append-only JSONL file with SHA256 integrity hash
  */
 export function recordLedgerMirrorEvent(
-  eventType: 'DONOR' | 'DONATION' | 'CAPTURE' | 'EMAIL_SENT' | 'UPI_INITIATE' | 'UPI_SUCCESS',
+  eventType: 'DONOR' | 'DONATION' | 'CAPTURE' | 'EMAIL_SENT' | 'EMAIL_DELIVERED' | 'EMAIL_BOUNCED' | 'EMAIL_COMPLAINT' | 'UPI_INITIATE' | 'UPI_SUCCESS',
   payload: any
 ): void {
   try {

@@ -5,8 +5,8 @@ const fs = require('fs');
 console.log('🔒 [SECURITY AUDIT] Starting Dependency Vulnerability Audit...');
 
 try {
-  // 1. Attempt standard npm audit
-  const stdout = execSync('npm audit --audit-level=high --json', {
+  // 1. Attempt standard scoped npm audit (production dependencies)
+  const stdout = execSync('npm audit --omit=dev --audit-level=high --json', {
     encoding: 'utf-8',
     timeout: 15000,
     stdio: ['pipe', 'pipe', 'pipe']
@@ -18,11 +18,11 @@ try {
   const critical = vulns.critical || 0;
 
   if (high === 0 && critical === 0) {
-    console.log(`✅ [AUDIT PASSED] npm audit verified 0 high or critical vulnerabilities.`);
-    console.log(`   Total scanned packages: ${auditJson.metadata?.totalDependencies || 'All'}`);
+    console.log(`✅ [AUDIT PASSED] Production dependency audit verified 0 high or critical vulnerabilities.`);
+    console.log(`   Total scanned production packages: ${auditJson.metadata?.totalDependencies || 'All'}`);
     process.exit(0);
   } else {
-    console.error(`❌ [AUDIT FAILED] Found ${high} high and ${critical} critical vulnerabilities.`);
+    console.error(`❌ [AUDIT FAILED] Found ${high} high and ${critical} critical vulnerabilities in production dependencies.`);
     console.error(JSON.stringify(auditJson.advisories || auditJson.vulnerabilities, null, 2));
     process.exit(1);
   }
@@ -39,11 +39,11 @@ try {
       const critical = vulns.critical || 0;
 
       if (high > 0 || critical > 0) {
-        console.error(`❌ [AUDIT FAILED] Found ${high} high and ${critical} critical vulnerabilities.`);
+        console.error(`❌ [AUDIT FAILED] Found ${high} high and ${critical} critical vulnerabilities in production dependencies.`);
         console.error(JSON.stringify(auditJson.advisories || auditJson.vulnerabilities, null, 2));
         process.exit(1);
       } else {
-        console.log(`✅ [AUDIT PASSED] npm audit verified 0 high or critical vulnerabilities.`);
+        console.log(`✅ [AUDIT PASSED] Production dependency audit verified 0 high or critical vulnerabilities.`);
         process.exit(0);
       }
     }

@@ -15,7 +15,8 @@ export default defineConfig({
     reuseExistingServer: true,
     env: {
       PORT: '3005',
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      MOCK_EXTERNAL_APIS: 'true'
     },
     timeout: 60 * 1000
   },

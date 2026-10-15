@@ -1,7 +1,7 @@
 import request from 'supertest';
 import { app } from '../../src/server';
 import { initDatabase, dbQuery, setAdminPasswordResetToken, updateAdminPasswordAndClearToken, getAdminByEmail } from '../../src/db';
-import { generatePasswordResetToken, hashPassword } from '../../src/security';
+import { generatePasswordResetToken, hashPassword, generateSvixSignature } from '../../src/security';
 
 describe('API Security, Validation & Endpoint Integration Suite', () => {
   let adminToken: string = '';
@@ -35,11 +35,33 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
   });
 
   describe('Core Health & HTTP Method Hardening', () => {
+    it('GET /healthz should return 200 OK for Render orchestrator probes', async () => {
+      const res = await request(app).get('/healthz');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+      expect(res.body.uptime).toBeDefined();
+    });
+
+    it('GET /api/healthz should return 200 OK', async () => {
+      const res = await request(app).get('/api/healthz');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('ok');
+    });
+
     it('GET /api/health should return 200 OK with service identifier', async () => {
       const res = await request(app).get('/api/health');
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('ok');
       expect(res.body.service).toBe('nonprofit-gateway');
+    });
+
+    it('OPTIONS request should return 204 No Content with CORS headers', async () => {
+      const res = await request(app)
+        .options('/api/health')
+        .set('Origin', 'https://artofrelaxation.org');
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBe('https://artofrelaxation.org');
+      expect(res.headers['access-control-allow-methods']).toContain('POST');
     });
 
     it('TRACE / TRACK methods should be blocked with 405 Method Not Allowed', async () => {
@@ -98,6 +120,32 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
       expect(res.body.orderId).toBeDefined();
       expect(res.body.idempotencyKey).toBeDefined();
       expect(res.body.trustName).toContain('Divya Yoga Mandal');
+    });
+
+    it('POST /api/donations/capture-order should capture order and record in ledger', async () => {
+      // 1. Create a test order first
+      const createRes = await request(app)
+        .post('/api/donations/create-order')
+        .send({
+          trustId: 'divya',
+          amount: 50.00,
+          currency: 'USD',
+          firstName: 'Kiran',
+          lastName: 'Patel',
+          email: `kiran-${Date.now()}@example.org`
+        });
+      expect(createRes.status).toBe(201);
+      const testOrderId = createRes.body.orderId;
+
+      // 2. Capture the created order
+      const captureRes = await request(app)
+        .post('/api/donations/capture-order')
+        .send({ orderId: testOrderId });
+
+      expect(captureRes.status).toBe(200);
+      expect(captureRes.body.status).toBe('COMPLETED');
+      expect(captureRes.body.captureId).toBeDefined();
+      expect(captureRes.body.gross).toBe(50.00);
     });
   });
 
@@ -340,4 +388,167 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
       }
     });
   });
+
+  describe('Resend Webhook & Email Status Tracking Endpoint (POST /api/webhooks/resend)', () => {
+    const webhookSecret = 'whsec_dGVzdF93ZWJob29rX3NlY3JldF9mb3JfaW50ZWdyYXRpb24=';
+    const originalSecret = process.env.RESEND_WEBHOOK_SECRET;
+
+    beforeAll(() => {
+      process.env.RESEND_WEBHOOK_SECRET = webhookSecret;
+    });
+
+    afterAll(() => {
+      process.env.RESEND_WEBHOOK_SECRET = originalSecret;
+    });
+
+    it('should reject webhook request when Svix cryptographic signature is invalid', async () => {
+      const payload = {
+        type: 'email.delivered',
+        data: {
+          email_id: 'resend-test-msg-001',
+          to: ['donor@example.org']
+        }
+      };
+      const rawBody = JSON.stringify(payload);
+      const svixId = 'msg_fail_test_001';
+      const svixTimestamp = Math.floor(Date.now() / 1000).toString();
+
+      const res = await request(app)
+        .post('/api/webhooks/resend')
+        .set('svix-id', svixId)
+        .set('svix-timestamp', svixTimestamp)
+        .set('svix-signature', 'v1,invalid_signature_data')
+        .send(payload);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Invalid svix cryptographic signature');
+    });
+
+    it('should process email.delivered event and update dispatch status to DELIVERED', async () => {
+      const testEmailId = `test-resend-${Date.now()}`;
+      // Seed an email dispatch log to verify status transition
+      await dbQuery(`
+        INSERT INTO email_dispatch_logs (order_id, donor_email, provider, status, message_id)
+        VALUES ($1, $2, 'resend', 'SUCCESS', $3)
+      `, ['TEST-ORDER-WEBHOOK-DELIVERY', 'donor@example.org', testEmailId]);
+
+      const payload = {
+        type: 'email.delivered',
+        data: {
+          email_id: testEmailId,
+          to: ['donor@example.org']
+        }
+      };
+      const rawBody = JSON.stringify(payload);
+      const svixId = `svix_evt_deliv_${Date.now()}`;
+      const svixTimestamp = Math.floor(Date.now() / 1000).toString();
+      const svixSignature = generateSvixSignature(rawBody, svixId, svixTimestamp, webhookSecret);
+
+      const res = await request(app)
+        .post('/api/webhooks/resend')
+        .set('svix-id', svixId)
+        .set('svix-timestamp', svixTimestamp)
+        .set('svix-signature', svixSignature)
+        .send(payload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('PROCESSED');
+      expect(res.body.eventType).toBe('email.delivered');
+
+      // Verify status in email_dispatch_logs was updated to DELIVERED
+      const updatedLog = await dbQuery(
+        'SELECT status FROM email_dispatch_logs WHERE message_id = $1',
+        [testEmailId]
+      );
+      expect(updatedLog.rows[0]?.status).toBe('DELIVERED');
+
+      // Idempotency: re-sending the same webhook event ID should return ALREADY_PROCESSED
+      const duplicateRes = await request(app)
+        .post('/api/webhooks/resend')
+        .set('svix-id', svixId)
+        .set('svix-timestamp', svixTimestamp)
+        .set('svix-signature', svixSignature)
+        .send(payload);
+
+      expect(duplicateRes.status).toBe(200);
+      expect(duplicateRes.body.status).toBe('ALREADY_PROCESSED');
+    });
+
+    it('should process email.bounced event and update dispatch status to BOUNCED with error details', async () => {
+      const bounceEmailId = `test-resend-bounce-${Date.now()}`;
+      await dbQuery(`
+        INSERT INTO email_dispatch_logs (order_id, donor_email, provider, status, message_id)
+        VALUES ($1, $2, 'resend', 'SUCCESS', $3)
+      `, ['TEST-ORDER-WEBHOOK-BOUNCE', 'bounced@example.org', bounceEmailId]);
+
+      const payload = {
+        type: 'email.bounced',
+        data: {
+          email_id: bounceEmailId,
+          to: ['bounced@example.org'],
+          bounce: {
+            message: 'Recipient inbox does not exist (550)'
+          }
+        }
+      };
+      const rawBody = JSON.stringify(payload);
+      const svixId = `svix_evt_bounce_${Date.now()}`;
+      const svixTimestamp = Math.floor(Date.now() / 1000).toString();
+      const svixSignature = generateSvixSignature(rawBody, svixId, svixTimestamp, webhookSecret);
+
+      const res = await request(app)
+        .post('/api/webhooks/resend')
+        .set('svix-id', svixId)
+        .set('svix-timestamp', svixTimestamp)
+        .set('svix-signature', svixSignature)
+        .send(payload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('PROCESSED');
+
+      const updatedLog = await dbQuery(
+        'SELECT status, error_details FROM email_dispatch_logs WHERE message_id = $1',
+        [bounceEmailId]
+      );
+      expect(updatedLog.rows[0]?.status).toBe('BOUNCED');
+      expect(updatedLog.rows[0]?.error_details).toContain('Recipient inbox does not exist');
+    });
+
+    it('should process email.complained event and update dispatch status to COMPLAINED', async () => {
+      const complaintEmailId = `test-resend-complaint-${Date.now()}`;
+      await dbQuery(`
+        INSERT INTO email_dispatch_logs (order_id, donor_email, provider, status, message_id)
+        VALUES ($1, $2, 'resend', 'SUCCESS', $3)
+      `, ['TEST-ORDER-WEBHOOK-COMPLAINT', 'complainer@example.org', complaintEmailId]);
+
+      const payload = {
+        type: 'email.complained',
+        data: {
+          email_id: complaintEmailId,
+          to: ['complainer@example.org']
+        }
+      };
+      const rawBody = JSON.stringify(payload);
+      const svixId = `svix_evt_complaint_${Date.now()}`;
+      const svixTimestamp = Math.floor(Date.now() / 1000).toString();
+      const svixSignature = generateSvixSignature(rawBody, svixId, svixTimestamp, webhookSecret);
+
+      const res = await request(app)
+        .post('/api/webhooks/resend')
+        .set('svix-id', svixId)
+        .set('svix-timestamp', svixTimestamp)
+        .set('svix-signature', svixSignature)
+        .send(payload);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('PROCESSED');
+
+      const updatedLog = await dbQuery(
+        'SELECT status FROM email_dispatch_logs WHERE message_id = $1',
+        [complaintEmailId]
+      );
+      expect(updatedLog.rows[0]?.status).toBe('COMPLAINED');
+    });
+  });
 });
+

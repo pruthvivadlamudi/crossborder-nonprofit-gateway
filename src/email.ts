@@ -42,6 +42,163 @@ export interface EmailDispatchResult {
 }
 
 /**
+ * Determine if external email provider calls should be safely mocked
+ * Active during automated tests (Jest/Playwright), CI environments, or when mock keys are used
+ */
+export function isMockMode(apiKey?: string): boolean {
+  return process.env.NODE_ENV === 'test' ||
+    process.env.MOCK_EXTERNAL_APIS === 'true' ||
+    Boolean(apiKey && (apiKey.startsWith('mock_') || apiKey.startsWith('test_')));
+}
+
+/**
+ * Resolves and validates the verified custom subdomain sender address
+ * Requires a verified custom subdomain/domain configured via environment variables
+ */
+export function getVerifiedSenderAddress(fallbackName?: string): { email: string; name: string } {
+  const fromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@mail.artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
+  const fromName = (process.env.RESEND_FROM_NAME || process.env.SENDER_NAME || fallbackName || 'The Art Of Relaxation Giving').trim().replace(/^['"]|['"]$/g, '');
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(fromEmail)) {
+    throw new Error(`Invalid custom sender email address: "${fromEmail}". A verified sender address is required.`);
+  }
+
+  // In production, reject unverified public or default domains
+  if (process.env.NODE_ENV === 'production') {
+    const domain = fromEmail.split('@')[1]?.toLowerCase();
+    const forbiddenDomains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'resend.dev'];
+    if (forbiddenDomains.some(d => domain === d || domain?.endsWith(`.${d}`))) {
+      throw new Error(`Sender address "${fromEmail}" uses an unverified public or default domain. Resend requires a verified custom domain/subdomain (e.g., mail.artofrelaxation.org).`);
+    }
+  }
+
+  return { email: fromEmail, name: fromName };
+}
+
+export interface ResendEmailPayload {
+  from: string;
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  reply_to?: string;
+  headers?: Record<string, string>;
+  tags?: { name: string; value: string }[];
+}
+
+export interface ResendSendOptions {
+  idempotencyKey?: string;
+  correlationId?: string;
+}
+
+export interface ResendSendResponse {
+  data: { id: string } | null;
+  error: { message: string; statusCode?: number; name?: string } | null;
+}
+
+/**
+ * Production-Grade Resend Email Client
+ * Enforces verified custom subdomain sender, passes Idempotency-Key headers,
+ * and adds structured logging and error handling.
+ */
+export class ResendClient {
+  private apiKey: string;
+
+  constructor(apiKey?: string) {
+    this.apiKey = (apiKey || process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  }
+
+  public get isConfigured(): boolean {
+    return Boolean(this.apiKey && !this.apiKey.includes('your_'));
+  }
+
+  public emails = {
+    send: async (payload: ResendEmailPayload, options?: ResendSendOptions): Promise<ResendSendResponse> => {
+      const correlationId = options?.correlationId;
+      const idempotencyKey = options?.idempotencyKey;
+
+      if (!this.isConfigured) {
+        return { data: null, error: { message: 'Resend API key is not configured.' } };
+      }
+
+      // Safe mock mode in tests, CI, or when mock keys are used
+      if (isMockMode(this.apiKey)) {
+        const mockId = `mock-resend-${uuidv4()}`;
+        logger.info(`[MOCK RESEND] Email send mocked successfully`, {
+          messageId: mockId,
+          idempotencyKey,
+          recipient: payload.to,
+          subject: payload.subject
+        }, 'EMAIL_SUCCESS', correlationId);
+        return { data: { id: mockId }, error: null };
+      }
+
+      const headers: Record<string, string> = {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      };
+
+      // Pass Idempotency-Key header on every resend.emails.send() call
+      if (idempotencyKey) {
+        headers['Idempotency-Key'] = idempotencyKey;
+      }
+
+      logger.info(`Dispatching email via Resend to ${Array.isArray(payload.to) ? payload.to.join(', ') : payload.to}`, {
+        provider: 'resend',
+        idempotencyKey,
+        keyPrefix: this.apiKey.slice(0, 6) + '...'
+      }, 'EMAIL_DISPATCH', correlationId);
+
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload)
+        });
+
+        const responseBody = await res.json() as any;
+
+        if (!res.ok) {
+          const errDetail = {
+            statusCode: res.status,
+            name: responseBody?.name || 'ResendApiError',
+            message: responseBody?.message || JSON.stringify(responseBody)
+          };
+          logger.error('Resend API request failed with error response', undefined, {
+            ...errDetail,
+            idempotencyKey,
+            recipient: payload.to
+          }, correlationId);
+          return { data: null, error: errDetail };
+        }
+
+        logger.info('Resend email successfully delivered', {
+          messageId: responseBody.id,
+          idempotencyKey,
+          recipient: payload.to
+        }, 'EMAIL_SUCCESS', correlationId);
+
+        return { data: { id: responseBody.id }, error: null };
+      } catch (err: any) {
+        const errorDetail = {
+          name: err.name || 'NetworkError',
+          message: err.message || 'Unknown network error communicating with Resend'
+        };
+        logger.error('Failed to communicate with Resend API', err, {
+          idempotencyKey,
+          recipient: payload.to
+        }, correlationId);
+        return { data: null, error: errorDetail };
+      }
+    }
+  };
+}
+
+export const resend = new ResendClient();
+
+
+/**
  * Social Sharing Link Generator
  * Generates pre-formatted, URL-encoded sharing URLs for WhatsApp, X (Twitter), Instagram, and Direct Portal Link
  */
@@ -321,9 +478,9 @@ export async function sendDonationConfirmationEmail(
   data: DonationEmailData,
   correlationId?: string
 ): Promise<EmailDispatchResult> {
-  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
-  const fromEmail = rawFromEmail;
-  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva').trim().replace(/^['"]|['"]$/g, '');
+  const sender = getVerifiedSenderAddress(data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva');
+  const fromEmail = sender.email;
+  const fromName = sender.name;
   const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
   const amountStr = isUpi
     ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
@@ -332,43 +489,38 @@ export async function sendDonationConfirmationEmail(
   const htmlContent = renderDonationEmailHtml(data);
 
   // 1. Resend Provider (Recommended: 3,000 free emails/month via simple REST)
-  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
-  const resendApiKey = rawResendKey;
-  if (resendApiKey && !resendApiKey.includes('your_')) {
-    logger.info(`Dispatching donation email via Resend to ${data.donorEmail} (Key length: ${resendApiKey.length}, prefix: ${resendApiKey.slice(0, 6)}...)`, { orderId: data.paypalOrderId, provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [data.donorEmail],
-          subject,
-          html: htmlContent
-        })
-      });
+  if (resend.isConfigured) {
+    const donationIdempotencyKey = data.paypalCaptureId || data.paypalOrderId || `donation-${Date.now()}`;
+    const result = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: [data.donorEmail],
+      subject,
+      html: htmlContent
+    }, {
+      idempotencyKey: donationIdempotencyKey,
+      correlationId
+    });
 
-      const responseBody = await res.json() as any;
-      if (!res.ok) {
-        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
-      }
-
-      await logEmailDispatch(data, 'resend', 'SUCCESS', responseBody.id);
-      logger.info(`Donation email successfully delivered via Resend`, { messageId: responseBody.id, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
-      return { success: true, provider: 'resend', messageId: responseBody.id };
-    } catch (err: any) {
-      logger.error('Failed to send donation email via Resend', err, { orderId: data.paypalOrderId, donorEmail: data.donorEmail }, correlationId);
-      await logEmailDispatch(data, 'resend', 'FAILURE', undefined, err.message);
-      return { success: false, provider: 'resend', error: `${err.message} (Key prefix: '${resendApiKey.slice(0, 7)}...', length: ${resendApiKey.length})` };
+    if (result.data) {
+      await logEmailDispatch(data, 'resend', 'SUCCESS', result.data.id);
+      return { success: true, provider: 'resend', messageId: result.data.id };
+    } else {
+      const errMsg = result.error?.message || 'Failed to dispatch via Resend';
+      await logEmailDispatch(data, 'resend', 'FAILURE', undefined, errMsg);
+      return { success: false, provider: 'resend', error: errMsg };
     }
   }
 
   // 2. Brevo / Sendinblue Provider (300 free emails/day = 9,000/month via REST API)
   const brevoApiKey = process.env.BREVO_API_KEY;
   if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    if (isMockMode(brevoApiKey)) {
+      const mockId = `mock-brevo-${uuidv4()}`;
+      await logEmailDispatch(data, 'brevo', 'SUCCESS', mockId);
+      logger.info(`[MOCK EMAIL] Donation email mocked via Brevo to ${data.donorEmail}`, { messageId: mockId, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: mockId };
+    }
+
     logger.info(`Dispatching donation email via Brevo to ${data.donorEmail}`, { orderId: data.paypalOrderId, provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -403,6 +555,13 @@ export async function sendDonationConfirmationEmail(
   // 3. SendGrid Provider (100 free emails/day)
   const sendgridApiKey = process.env.SENDGRID_API_KEY;
   if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    if (isMockMode(sendgridApiKey)) {
+      const mockId = `mock-sendgrid-${uuidv4()}`;
+      await logEmailDispatch(data, 'sendgrid', 'SUCCESS', mockId);
+      logger.info(`[MOCK EMAIL] Donation email mocked via SendGrid to ${data.donorEmail}`, { messageId: mockId, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: mockId };
+    }
+
     logger.info(`Dispatching donation email via SendGrid to ${data.donorEmail}`, { orderId: data.paypalOrderId, provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -635,49 +794,44 @@ export async function sendPasswordResetEmail(
   resetLink: string,
   correlationId?: string
 ): Promise<EmailDispatchResult> {
-  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
-  const fromEmail = rawFromEmail;
-  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Compliance').trim().replace(/^['"]|['"]$/g, '');
+  const sender = getVerifiedSenderAddress('Divya Yoga Mandali Compliance');
+  const fromEmail = sender.email;
+  const fromName = sender.name;
   const subject = `Urgent: Trustee Passcode Reset Authorization - Divya Yoga Mandali`;
   const htmlContent = renderPasswordResetEmailHtml(adminName, resetLink, 20);
 
   // 1. Resend Provider
-  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
-  const resendApiKey = rawResendKey;
-  if (resendApiKey && !resendApiKey.includes('your_')) {
-    logger.info(`Dispatching password reset email via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [adminEmail],
-          subject,
-          html: htmlContent
-        })
-      });
+  if (resend.isConfigured) {
+    const resetIdempotencyKey = `reset-${adminEmail}-${Date.now()}`;
+    const result = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: [adminEmail],
+      subject,
+      html: htmlContent
+    }, {
+      idempotencyKey: resetIdempotencyKey,
+      correlationId
+    });
 
-      const responseBody = await res.json() as any;
-      if (!res.ok) {
-        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
-      }
-
-      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id);
-      logger.info(`Password reset email delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
-      return { success: true, provider: 'resend', messageId: responseBody.id };
-    } catch (err: any) {
-      logger.error('Failed to send password reset email via Resend', err, { email: adminEmail }, correlationId);
-      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message);
+    if (result.data) {
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', result.data.id);
+      return { success: true, provider: 'resend', messageId: result.data.id };
+    } else {
+      const errMsg = result.error?.message || 'Resend reset dispatch failed';
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, errMsg);
     }
   }
 
   // 2. Brevo Provider
   const brevoApiKey = process.env.BREVO_API_KEY;
   if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    if (isMockMode(brevoApiKey)) {
+      const mockId = `mock-brevo-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', mockId);
+      logger.info(`[MOCK EMAIL] Password reset email mocked via Brevo to ${adminEmail}`, { messageId: mockId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: mockId };
+    }
+
     logger.info(`Dispatching password reset email via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -711,6 +865,13 @@ export async function sendPasswordResetEmail(
   // 3. SendGrid Provider
   const sendgridApiKey = process.env.SENDGRID_API_KEY;
   if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    if (isMockMode(sendgridApiKey)) {
+      const mockId = `mock-sendgrid-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', mockId);
+      logger.info(`[MOCK EMAIL] Password reset email mocked via SendGrid to ${adminEmail}`, { messageId: mockId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: mockId };
+    }
+
     logger.info(`Dispatching password reset email via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
@@ -942,50 +1103,45 @@ export async function sendPasswordChangedAlertEmail(
   urgentResetLink: string,
   correlationId?: string
 ): Promise<EmailDispatchResult> {
-  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
-  const fromEmail = rawFromEmail;
-  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Security Alert').trim().replace(/^['"]|['"]$/g, '');
+  const sender = getVerifiedSenderAddress('Divya Yoga Mandali Security Alert');
+  const fromEmail = sender.email;
+  const fromName = sender.name;
   const subject = `Security Alert: Trustee Passcode Changed - Divya Yoga Mandali`;
   const timestamp = new Date().toUTCString();
   const htmlContent = renderPasswordChangedAlertEmailHtml(adminEmail, adminName, timestamp, clientIp, urgentResetLink);
 
   // 1. Resend Provider
-  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
-  const resendApiKey = rawResendKey;
-  if (resendApiKey && !resendApiKey.includes('your_')) {
-    logger.info(`Dispatching password changed alert via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: `${fromName} <${fromEmail}>`,
-          to: [adminEmail],
-          subject,
-          html: htmlContent
-        })
-      });
+  if (resend.isConfigured) {
+    const alertIdempotencyKey = `alert-${adminEmail}-${Date.now()}`;
+    const result = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: [adminEmail],
+      subject,
+      html: htmlContent
+    }, {
+      idempotencyKey: alertIdempotencyKey,
+      correlationId
+    });
 
-      const responseBody = await res.json() as any;
-      if (!res.ok) {
-        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
-      }
-
-      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id, undefined, 'PASSWORD_CHANGED_ALERT');
-      logger.info(`Password changed alert delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
-      return { success: true, provider: 'resend', messageId: responseBody.id };
-    } catch (err: any) {
-      logger.error('Failed to send password changed alert via Resend', err, { email: adminEmail }, correlationId);
-      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    if (result.data) {
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', result.data.id, undefined, 'PASSWORD_CHANGED_ALERT');
+      return { success: true, provider: 'resend', messageId: result.data.id, renderedHtml: htmlContent };
+    } else {
+      const errMsg = result.error?.message || 'Resend alert dispatch failed';
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, errMsg, 'PASSWORD_CHANGED_ALERT');
     }
   }
 
   // 2. Brevo Provider
   const brevoApiKey = process.env.BREVO_API_KEY;
   if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    if (isMockMode(brevoApiKey)) {
+      const mockId = `mock-brevo-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', mockId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`[MOCK EMAIL] Password changed alert mocked via Brevo to ${adminEmail}`, { messageId: mockId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: mockId, renderedHtml: htmlContent };
+    }
+
     logger.info(`Dispatching password changed alert via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -1019,6 +1175,13 @@ export async function sendPasswordChangedAlertEmail(
   // 3. SendGrid Provider
   const sendgridApiKey = process.env.SENDGRID_API_KEY;
   if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    if (isMockMode(sendgridApiKey)) {
+      const mockId = `mock-sendgrid-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', mockId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`[MOCK EMAIL] Password changed alert mocked via SendGrid to ${adminEmail}`, { messageId: mockId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: mockId, renderedHtml: htmlContent };
+    }
+
     logger.info(`Dispatching password changed alert via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
     try {
       const res = await fetch('https://api.sendgrid.com/v3/mail/send', {

@@ -15,8 +15,10 @@ module.exports = {
       tsconfig: {
         target: 'ES2022',
         module: 'CommonJS',
+        moduleResolution: 'node',
         strict: true,
         esModuleInterop: true,
+        resolveJsonModule: true,
         skipLibCheck: true,
         types: ['node', 'jest']
       }

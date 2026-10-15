@@ -15,8 +15,11 @@ import {
   generatePasswordResetToken,
   hashResetToken,
   validatePasswordStrength,
-  maskEmail
+  maskEmail,
+  verifySvixWebhookSignature,
+  generateSvixSignature
 } from '../../src/security';
+import { getClientIp } from '../../src/server';
 
 describe('Security & DPDP Compliance Suite', () => {
   describe('AES-256-GCM Column-Level Encryption & Decryption', () => {
@@ -217,5 +220,126 @@ describe('Security & DPDP Compliance Suite', () => {
       expect(maskEmail('invalid-email')).toBe('***@***.***');
     });
   });
+
+  describe('Svix Webhook Cryptographic Verification (Resend Protocol)', () => {
+    const testSecret = 'whsec_dGVzdF9zZWNyZXRfa2V5X2Zvcl9zdml4X3ZhbGlkYXRpb24=';
+    const rawBody = JSON.stringify({ type: 'email.delivered', data: { email_id: 'msg_123' } });
+    const svixId = 'msg_test_svix_id_001';
+
+    it('should successfully verify a valid Svix HMAC-SHA256 signature', () => {
+      const nowSeconds = Math.floor(Date.now() / 1000).toString();
+      const validSig = generateSvixSignature(rawBody, svixId, nowSeconds, testSecret);
+
+      const verification = verifySvixWebhookSignature(
+        rawBody,
+        { id: svixId, timestamp: nowSeconds, signature: validSig },
+        testSecret
+      );
+
+      expect(verification.valid).toBe(true);
+      expect(verification.error).toBeUndefined();
+    });
+
+    it('should reject tampered payload with invalid cryptographic signature error', () => {
+      const nowSeconds = Math.floor(Date.now() / 1000).toString();
+      const validSig = generateSvixSignature(rawBody, svixId, nowSeconds, testSecret);
+      const tamperedBody = JSON.stringify({ type: 'email.delivered', data: { email_id: 'tampered_id' } });
+
+      const verification = verifySvixWebhookSignature(
+        tamperedBody,
+        { id: svixId, timestamp: nowSeconds, signature: validSig },
+        testSecret
+      );
+
+      expect(verification.valid).toBe(false);
+      expect(verification.error).toContain('Invalid svix cryptographic signature');
+    });
+
+    it('should reject replay attacks when timestamp is outside tolerance window (>300s)', () => {
+      const expiredTimestamp = (Math.floor(Date.now() / 1000) - 360).toString(); // 6 minutes ago
+      const expiredSig = generateSvixSignature(rawBody, svixId, expiredTimestamp, testSecret);
+
+      const verification = verifySvixWebhookSignature(
+        rawBody,
+        { id: svixId, timestamp: expiredTimestamp, signature: expiredSig },
+        testSecret,
+        300
+      );
+
+      expect(verification.valid).toBe(false);
+      expect(verification.error).toContain('expired or out of tolerance');
+    });
+
+    it('should reject request missing mandatory svix headers', () => {
+      const verification = verifySvixWebhookSignature(
+        rawBody,
+        { id: svixId, timestamp: undefined, signature: 'v1,some_sig' },
+        testSecret
+      );
+
+      expect(verification.valid).toBe(false);
+      expect(verification.error).toContain('Missing mandatory svix headers');
+    });
+
+    it('should reject non-numeric svix timestamp', () => {
+      const verification = verifySvixWebhookSignature(
+        rawBody,
+        { id: svixId, timestamp: 'invalid_ts', signature: 'v1,some_sig' },
+        testSecret
+      );
+
+      expect(verification.valid).toBe(false);
+      expect(verification.error).toContain('Invalid svix-timestamp format');
+    });
+  });
+
+  describe('Cloudflare & Reverse Proxy Client IP Resolution (getClientIp)', () => {
+    it('should prioritize cf-connecting-ip from Cloudflare Edge Proxy', () => {
+      const mockReq: any = {
+        headers: {
+          'cf-connecting-ip': '203.0.113.195',
+          'x-forwarded-for': '198.51.100.1, 192.0.2.1',
+          'x-real-ip': '198.51.100.1'
+        },
+        ip: '10.0.0.1',
+        socket: { remoteAddress: '10.0.0.1' }
+      };
+      expect(getClientIp(mockReq)).toBe('203.0.113.195');
+    });
+
+    it('should fall back to x-real-ip if cf-connecting-ip is not present', () => {
+      const mockReq: any = {
+        headers: {
+          'x-real-ip': '198.51.100.42',
+          'x-forwarded-for': '198.51.100.42, 192.0.2.1'
+        },
+        ip: '10.0.0.1',
+        socket: { remoteAddress: '10.0.0.1' }
+      };
+      expect(getClientIp(mockReq)).toBe('198.51.100.42');
+    });
+
+    it('should fall back to first IP in x-forwarded-for', () => {
+      const mockReq: any = {
+        headers: {
+          'x-forwarded-for': '203.0.113.50, 10.0.0.2'
+        },
+        ip: '10.0.0.1',
+        socket: { remoteAddress: '10.0.0.1' }
+      };
+      expect(getClientIp(mockReq)).toBe('203.0.113.50');
+    });
+
+    it('should fall back to req.ip or socket.remoteAddress if no proxy headers are present', () => {
+      const mockReq: any = {
+        headers: {},
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' }
+      };
+      expect(getClientIp(mockReq)).toBe('127.0.0.1');
+    });
+  });
 });
+
+
 

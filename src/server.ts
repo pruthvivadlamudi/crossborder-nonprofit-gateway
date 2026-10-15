@@ -25,7 +25,9 @@ import {
   DonationEmailData,
   renderDonationEmailHtml,
   sendPasswordResetEmail,
-  sendPasswordChangedAlertEmail
+  sendPasswordChangedAlertEmail,
+  getVerifiedSenderAddress,
+  resend
 } from './email';
 import {
   timingSafeStringCompare,
@@ -40,7 +42,9 @@ import {
   generatePasswordResetToken,
   hashResetToken,
   validatePasswordStrength,
-  maskEmail
+  maskEmail,
+  verifySvixWebhookSignature,
+  SvixWebhookHeaders
 } from './security';
 
 dotenv.config();
@@ -52,11 +56,62 @@ interface AuthenticatedRequest extends Request {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+/**
+ * Resolves the true client IP when sitting behind Cloudflare, Render, or reverse proxies
+ */
+export function getClientIp(req: Request): string {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (typeof cfIp === 'string' && cfIp.trim()) {
+    return cfIp.trim();
+  }
+  const xRealIp = req.headers['x-real-ip'];
+  if (typeof xRealIp === 'string' && xRealIp.trim()) {
+    return xRealIp.trim();
+  }
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket.remoteAddress || '127.0.0.1';
+}
+
 // Enable 'trust proxy' for cloud reverse proxies (Render, Cloudflare, AWS)
-// Ensures express-rate-limit and audit loggers accurately identify real client IPs from X-Forwarded-For
+// 1 hop for Render reverse proxy; getClientIp() handles CF-Connecting-IP
 app.set('trust proxy', 1);
 
-// Security: Enforce Strict HTTP Security Headers via Helmet
+// Cloudflare & Production-Grade Cross-Origin Resource Sharing (CORS) Configuration
+const ALLOWED_ORIGINS = [
+  'https://artofrelaxation.org',
+  'https://www.artofrelaxation.org',
+  'https://dymct-aor-gateway.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:3005',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3005'
+];
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin as string;
+  if (origin) {
+    if (ALLOWED_ORIGINS.includes(origin) || origin.endsWith('.artofrelaxation.org') || origin.endsWith('.onrender.com')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Idempotency-Key, svix-id, svix-timestamp, svix-signature, paypal-transmission-id, paypal-transmission-sig, paypal-cert-url, paypal-auth-algo');
+  res.setHeader('Access-Control-Max-Age', '86400');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
+// Security: Enforce Strict HTTP Security Headers via Helmet (with Cloudflare support)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -68,7 +123,8 @@ app.use(helmet({
         "https://www.paypal.com",
         "https://*.paypal.com",
         "https://*.paypalobjects.com",
-        "https://cdn.jsdelivr.net"
+        "https://cdn.jsdelivr.net",
+        "https://static.cloudflareinsights.com"
       ],
       scriptSrcAttr: ["'unsafe-inline'"],
       connectSrc: [
@@ -77,7 +133,8 @@ app.use(helmet({
         "https://*.paypal.com",
         "https://api-m.paypal.com",
         "https://api-m.sandbox.paypal.com",
-        "https://api.qrserver.com"
+        "https://api.qrserver.com",
+        "https://cloudflareinsights.com"
       ],
       styleSrc: [
         "'self'",
@@ -121,13 +178,14 @@ app.use((req, res, next) => {
 // Structured Request Tracing & Correlation Middleware
 app.use(requestLoggingMiddleware);
 
-// Security: Global API Rate Limiter (DDoS Mitigation)
+// Security: Global API Rate Limiter (DDoS Mitigation keyed on true client IP)
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 180,
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => getClientIp(req),
   message: { error: 'Rate limit exceeded. Please wait a minute before making more requests.' }
 });
 
@@ -138,6 +196,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => getClientIp(req),
   message: { error: 'Too many authentication attempts. Please try again after 15 minutes.' }
 });
 
@@ -148,6 +207,7 @@ const forgotPasswordLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => getClientIp(req),
   message: { error: 'Too many password reset requests from this network. Please try again after 15 minutes.' }
 });
 
@@ -158,16 +218,44 @@ const resetPasswordLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
+  keyGenerator: (req) => getClientIp(req),
   message: { error: 'Too many password reset attempts. Please try again after 15 minutes.' }
 });
 
 app.use('/api/', apiLimiter);
 
-// Preserve raw request buffer for PayPal webhook signature verification with 100kb payload ceiling
+// Webhook Raw Request Body Preservation Middleware
+// Specifically captures the raw unparsed request body for /api/webhooks/*
+// for cryptographic HMAC signature verification (Svix for Resend, PayPal webhook) before any global parser mutates req.body
+app.use('/api/webhooks', express.raw({
+  type: '*/*',
+  limit: '1mb'
+}), (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  if (Buffer.isBuffer(req.body)) {
+    req.rawBody = req.body.toString('utf8');
+    try {
+      req.body = JSON.parse(req.rawBody);
+    } catch {
+      req.body = {};
+    }
+  } else if (typeof req.body === 'string') {
+    req.rawBody = req.body;
+    try {
+      req.body = JSON.parse(req.body);
+    } catch {
+      req.body = {};
+    }
+  }
+  next();
+});
+
+// Standard API JSON Parser for all other endpoints
 app.use(express.json({
   limit: '100kb',
   verify: (req: AuthenticatedRequest, res, buf) => {
-    req.rawBody = buf.toString('utf8');
+    if (!req.rawBody) {
+      req.rawBody = buf.toString('utf8');
+    }
   }
 }));
 
@@ -256,7 +344,15 @@ function adminAuthMiddleware(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-// Health check endpoint for cloud platforms (Render/Koyeb) and UptimeRobot monitoring
+// Lightweight health check endpoints for cloud platforms (Render / Kubernetes / UptimeRobot)
+app.get('/healthz', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+app.get('/api/healthz', (req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 app.get('/api/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString(), service: 'nonprofit-gateway' });
 });
@@ -510,6 +606,17 @@ const cachedTokens: Record<string, { token: string; expiresAt: number }> = {};
 
 async function getPayPalAccessToken(trustId: string = 'divya'): Promise<string> {
   const creds = getTrustCredentials(trustId);
+
+  // Return mock token in test mode, CI runs, or when mock credentials are used
+  if (
+    process.env.NODE_ENV === 'test' ||
+    process.env.MOCK_EXTERNAL_APIS === 'true' ||
+    creds.clientId.startsWith('mock_') ||
+    creds.clientId.startsWith('test_')
+  ) {
+    return `mock-paypal-access-token-${trustId}`;
+  }
+
   if (!creds.clientId || !creds.clientSecret) {
     throw new Error(`PayPal credentials for entity '${trustId}' are not configured.`);
   }
@@ -548,8 +655,12 @@ async function getPayPalAccessToken(trustId: string = 'divya'): Promise<string> 
  * Helper: Cryptographic Webhook Signature Verification
  */
 async function verifyPayPalWebhookSignature(req: AuthenticatedRequest, trustId: string = 'divya'): Promise<boolean> {
-  if (process.env.NODE_ENV === 'development' && !WEBHOOK_ID) {
-    return true; // Graceful bypass for local testing
+  if (
+    process.env.NODE_ENV === 'test' ||
+    process.env.MOCK_EXTERNAL_APIS === 'true' ||
+    (process.env.NODE_ENV === 'development' && !WEBHOOK_ID)
+  ) {
+    return true; // Graceful bypass for automated tests & local development
   }
 
   const authAlgo = req.headers['paypal-auth-algo'] as string;
@@ -714,8 +825,14 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
     let orderId: string;
     const creds = getTrustCredentials(profile.id);
 
-    // If PayPal keys are configured for this trust, call PayPal API
-    if (creds.clientId && creds.clientSecret) {
+    // If PayPal keys are configured for this trust, call PayPal API (safely mocked in test / CI)
+    const isMock =
+      process.env.NODE_ENV === 'test' ||
+      process.env.MOCK_EXTERNAL_APIS === 'true' ||
+      creds.clientId.startsWith('mock_') ||
+      creds.clientId.startsWith('test_');
+
+    if (creds.clientId && creds.clientSecret && !isMock) {
       const accessToken = await getPayPalAccessToken(profile.id);
       const paypalPayload = {
         intent: 'CAPTURE',
@@ -755,7 +872,7 @@ app.post('/api/donations/create-order', async (req: Request, res: Response) => {
       const orderData = await orderResponse.json() as { id: string };
       orderId = orderData.id;
     } else {
-      // Mock Order ID for instant testing before API keys are plugged in
+      // Mock Order ID for instant testing before API keys are plugged in or in test runner
       orderId = `MOCK-ORDER-${Date.now()}`;
     }
 
@@ -917,7 +1034,14 @@ app.post('/api/donations/capture-order', async (req: Request, res: Response) => 
     const trustId = donationRow.rows[0]?.trust_id || req.body.trustId || 'divya';
     const creds = getTrustCredentials(trustId);
 
-    if (creds.clientId && creds.clientSecret && !orderId.startsWith('MOCK-')) {
+    const isMock =
+      process.env.NODE_ENV === 'test' ||
+      process.env.MOCK_EXTERNAL_APIS === 'true' ||
+      creds.clientId.startsWith('mock_') ||
+      creds.clientId.startsWith('test_') ||
+      orderId.startsWith('MOCK-');
+
+    if (creds.clientId && creds.clientSecret && !isMock) {
       const accessToken = await getPayPalAccessToken(trustId);
       const captureResponse = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders/${orderId}/capture`, {
         method: 'POST',
@@ -1318,6 +1442,110 @@ app.post('/api/webhooks/paypal', async (req: AuthenticatedRequest, res: Response
     logger.error('Webhook processing exception', err, { eventId: req.body?.id }, (req as any).correlationId);
     return res.status(500).json({ error: 'Internal failure processing webhook.' });
   }
+});
+
+/**
+ * 4b. Resend Cryptographically Signed Webhook Listener (Svix Protocol)
+ * Validates svix-id, svix-timestamp, and svix-signature headers using the raw request body.
+ * Logs email.delivered, email.bounced, and email.complained events.
+ */
+app.post('/api/webhooks/resend', async (req: AuthenticatedRequest, res: Response) => {
+  const correlationId = (req as any).correlationId;
+  const rawBody = req.rawBody || JSON.stringify(req.body);
+
+  const svixHeaders: SvixWebhookHeaders = {
+    id: req.headers['svix-id'] as string,
+    timestamp: req.headers['svix-timestamp'] as string,
+    signature: req.headers['svix-signature'] as string
+  };
+
+  const verification = verifySvixWebhookSignature(rawBody, svixHeaders);
+  if (!verification.valid) {
+    logger.warn(`Resend webhook signature verification failed: ${verification.error}`, {
+      headers: svixHeaders,
+      error: verification.error
+    }, 'WEBHOOK_RESEND_INVALID', correlationId);
+    return res.status(400).json({ error: verification.error || 'Invalid svix signature' });
+  }
+
+  const event = req.body;
+  if (!event || !event.type) {
+    return res.status(400).json({ error: 'Malformed webhook event payload' });
+  }
+
+  const eventType = event.type; // e.g. email.delivered, email.bounced, email.complained
+  const eventId = (req.headers['svix-id'] as string) || event.data?.email_id || uuidv4();
+  const recipient = Array.isArray(event.data?.to) ? event.data.to[0] : event.data?.to;
+  const emailId = event.data?.email_id;
+
+  logger.info(`Received verified Resend webhook event: ${eventType}`, {
+    eventType,
+    emailId,
+    recipient
+  }, 'WEBHOOK_RESEND_EVENT', correlationId);
+
+  // Idempotency: Prevent duplicate webhook event processing
+  const existingLog = await dbQuery('SELECT id FROM webhook_logs WHERE event_id = $1', [eventId]);
+  if (existingLog.rows.length > 0) {
+    return res.status(200).json({ status: 'ALREADY_PROCESSED' });
+  }
+
+  // Record in webhook_logs
+  await dbQuery(`
+    INSERT INTO webhook_logs (id, event_id, event_type, resource_type, payload, processed_status)
+    VALUES ($1, $2, $3, $4, $5, 'PROCESSED')
+  `, [
+    uuidv4(),
+    eventId,
+    eventType,
+    'RESEND_EMAIL',
+    JSON.stringify(event)
+  ]);
+
+  // Update email_dispatch_logs and record mirror ledger event according to Resend event type
+  switch (eventType) {
+    case 'email.delivered': {
+      if (emailId) {
+        await dbQuery(`
+          UPDATE email_dispatch_logs 
+          SET status = 'DELIVERED' 
+          WHERE message_id = $1
+        `, [emailId]);
+      }
+      recordLedgerMirrorEvent('EMAIL_DELIVERED', { emailId, recipient, eventType });
+      break;
+    }
+    case 'email.bounced': {
+      const bounceReason = event.data?.bounce?.message || 'Email delivery bounced';
+      if (emailId) {
+        await dbQuery(`
+          UPDATE email_dispatch_logs 
+          SET status = 'BOUNCED', error_details = $1 
+          WHERE message_id = $2
+        `, [bounceReason, emailId]);
+      }
+      logger.error('Resend email delivery bounced', undefined, { emailId, recipient, bounceReason }, correlationId);
+      recordLedgerMirrorEvent('EMAIL_BOUNCED', { emailId, recipient, bounceReason });
+      break;
+    }
+    case 'email.complained': {
+      if (emailId) {
+        await dbQuery(`
+          UPDATE email_dispatch_logs 
+          SET status = 'COMPLAINED' 
+          WHERE message_id = $1
+        `, [emailId]);
+      }
+      logger.warn('Resend email recipient marked spam complaint', { emailId, recipient }, 'EMAIL_COMPLAINT', correlationId);
+      recordLedgerMirrorEvent('EMAIL_COMPLAINT', { emailId, recipient });
+      break;
+    }
+    default:
+      // Other events logged informatively
+      break;
+  }
+
+  return res.status(200).json({ status: 'PROCESSED', eventType, emailId });
 });
 
 // ============================================================================
@@ -2183,10 +2411,49 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
+/**
+ * Graceful Shutdown Handler for Render and Docker Containers
+ * Listens for SIGTERM and SIGINT, closes the HTTP listener, finishes in-flight requests,
+ * and sets a 10s fallback watchdog to terminate cleanly.
+ */
+export function setupGracefulShutdown(server: any) {
+  let isShuttingDown = false;
+
+  const handleShutdown = (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
+    logger.info(`Received ${signal}. Initiating graceful server shutdown...`, { signal }, 'SERVER_SHUTDOWN');
+    console.log(`\n[SHUTDOWN] Received ${signal}. Closing HTTP server and completing in-flight requests...`);
+
+    // Force exit after 10 seconds if in-flight connections refuse to terminate
+    const forceExitTimer = setTimeout(() => {
+      logger.error('Graceful shutdown timed out after 10s. Forcing container termination.', undefined, { signal }, 'SERVER_SHUTDOWN');
+      console.error('[SHUTDOWN] Graceful shutdown watchdog timed out. Exiting.');
+      process.exit(1);
+    }, 10000);
+    forceExitTimer.unref();
+
+    server.close((err?: Error) => {
+      if (err) {
+        logger.error('Error closing HTTP server during shutdown', err, undefined, 'SERVER_SHUTDOWN');
+        console.error('[SHUTDOWN] Error closing server:', err);
+        process.exit(1);
+      }
+      logger.info('HTTP server closed cleanly. All in-flight requests completed.', undefined, 'SERVER_SHUTDOWN');
+      console.log('[SHUTDOWN] HTTP server closed cleanly. Safe to terminate container.');
+      process.exit(0);
+    });
+  };
+
+  process.once('SIGTERM', () => handleShutdown('SIGTERM'));
+  process.once('SIGINT', () => handleShutdown('SIGINT'));
+}
+
 // Boot Server & Initialize Database
 async function startServer() {
   await initDatabase();
-  return app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     logger.info(`FinTech Cross-Border Non-Profit Engine Online on port ${PORT} [${PAYPAL_MODE.toUpperCase()}]`, {
       port: PORT,
       paypalMode: PAYPAL_MODE,
@@ -2205,6 +2472,9 @@ async function startServer() {
     console.log(` Logging: Structured JSON + 7-Day Free-Tier Retention `);
     console.log(`=======================================================`);
   });
+
+  setupGracefulShutdown(server);
+  return server;
 }
 
 // Only launch standalone listener if not being imported in an automated test runner
@@ -2213,4 +2483,5 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export { app, startServer };
+
 

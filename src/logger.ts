@@ -295,7 +295,12 @@ export function requestLoggingMiddleware(req: Request, res: Response, next: Next
   res.setHeader('x-correlation-id', correlationId);
 
   const start = Date.now();
-  const clientIp = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+  const rawIp = (req.headers['cf-connecting-ip'] as string) ||
+    (req.headers['x-real-ip'] as string) ||
+    (req.headers['x-forwarded-for'] as string) ||
+    req.socket.remoteAddress ||
+    '';
+  const clientIp = rawIp.split(',')[0].trim();
   const anonymizedIp = clientIp.includes('.')
     ? clientIp.split('.').slice(0, 2).join('.') + '.***.***'
     : 'masked';

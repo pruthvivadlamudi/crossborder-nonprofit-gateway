@@ -320,3 +320,107 @@ export function maskEmail(email: string): string {
   return `${user[0]}***${user.slice(-1)}@${domain}`;
 }
 
+/**
+ * Svix Webhook Headers Contract (Resend Webhook Protocol)
+ */
+export interface SvixWebhookHeaders {
+  id?: string;
+  timestamp?: string;
+  signature?: string;
+}
+
+/**
+ * Validates Svix Webhook Signature used by Resend
+ * Cryptographically verifies svix-id, svix-timestamp, and svix-signature against raw request body
+ */
+export function verifySvixWebhookSignature(
+  rawBody: string,
+  headers: SvixWebhookHeaders,
+  secretKey?: string,
+  toleranceSeconds: number = 300
+): { valid: boolean; error?: string } {
+  const secret = secretKey || process.env.RESEND_WEBHOOK_SECRET || '';
+
+  // In test mode without explicitly configured secret, allow test bypass
+  if ((process.env.NODE_ENV === 'test' || process.env.MOCK_EXTERNAL_APIS === 'true') && !secret) {
+    return { valid: true };
+  }
+
+  if (!secret) {
+    return { valid: false, error: 'Resend webhook secret (RESEND_WEBHOOK_SECRET) is not configured.' };
+  }
+
+  const svixId = headers.id;
+  const svixTimestamp = headers.timestamp;
+  const svixSignature = headers.signature;
+
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    return { valid: false, error: 'Missing mandatory svix headers (svix-id, svix-timestamp, svix-signature).' };
+  }
+
+  // Validate timestamp freshness (Replay attack protection)
+  const timestampNum = parseInt(svixTimestamp, 10);
+  if (isNaN(timestampNum)) {
+    return { valid: false, error: 'Invalid svix-timestamp format.' };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSeconds - timestampNum) > toleranceSeconds) {
+    return { valid: false, error: `Webhook timestamp expired or out of tolerance (+/- ${toleranceSeconds}s).` };
+  }
+
+  // Decode secret (strip whsec_ prefix if present)
+  const cleanSecret = secret.startsWith('whsec_') ? secret.slice(6) : secret;
+  let secretBytes: Buffer;
+  try {
+    secretBytes = Buffer.from(cleanSecret, 'base64');
+  } catch {
+    secretBytes = Buffer.from(cleanSecret, 'utf8');
+  }
+
+  const toSign = `${svixId}.${svixTimestamp}.${rawBody}`;
+  const expectedSig = crypto.createHmac('sha256', secretBytes).update(toSign).digest('base64');
+
+  // Verify signature against v1 signatures in header
+  const signatureParts = svixSignature.split(' ');
+  let matches = false;
+
+  for (const part of signatureParts) {
+    const [version, sig] = part.split(',');
+    if (version === 'v1' && sig) {
+      if (timingSafeStringCompare(sig, expectedSig)) {
+        matches = true;
+        break;
+      }
+    }
+  }
+
+  if (!matches) {
+    return { valid: false, error: 'Invalid svix cryptographic signature.' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Svix Webhook Signature Generator (Utility for tests & signature generation)
+ */
+export function generateSvixSignature(
+  rawBody: string,
+  svixId: string,
+  svixTimestamp: string,
+  secretKey: string
+): string {
+  const cleanSecret = secretKey.startsWith('whsec_') ? secretKey.slice(6) : secretKey;
+  let secretBytes: Buffer;
+  try {
+    secretBytes = Buffer.from(cleanSecret, 'base64');
+  } catch {
+    secretBytes = Buffer.from(cleanSecret, 'utf8');
+  }
+  const toSign = `${svixId}.${svixTimestamp}.${rawBody}`;
+  const sig = crypto.createHmac('sha256', secretBytes).update(toSign).digest('base64');
+  return `v1,${sig}`;
+}
+
+

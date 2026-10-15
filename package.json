@@ -19,7 +19,7 @@
     "status": "node scripts/status.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20.14.0 <23.0.0"
   },
   "keywords": [
     "paypal",

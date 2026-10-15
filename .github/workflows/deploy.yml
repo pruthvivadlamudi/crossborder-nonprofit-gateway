@@ -10,14 +10,30 @@ jobs:
     name: Verify & Deploy to Render
     runs-on: ubuntu-latest
 
+    env:
+      CI: 'true'
+      NODE_ENV: 'test'
+      PORT: '3000'
+      ADMIN_EMAIL: 'trustee@nonprofit.org'
+      ADMIN_PASSWORD: 'DemoTrustee2026!'
+      JWT_SECRET: 'demo-jwt-secret-audit-key-2026'
+      DATA_ENCRYPTION_KEY: 'demo-encryption-salt-dev-only-2026'
+      RESEND_API_KEY: 'mock_resend_api_key_ci_2026'
+      PAYPAL_DIVYA_CLIENT_ID: 'mock_paypal_divya_client_id_ci'
+      PAYPAL_DIVYA_CLIENT_SECRET: 'mock_paypal_divya_client_secret_ci'
+      PAYPAL_RELAXATION_CLIENT_ID: 'mock_paypal_relaxation_client_id_ci'
+      PAYPAL_RELAXATION_CLIENT_SECRET: 'mock_paypal_relaxation_client_secret_ci'
+      DATABASE_URL: ''
+      MOCK_EXTERNAL_APIS: 'true'
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js 20 LTS (Parity with Render)
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install Dependencies
@@ -26,15 +42,19 @@ jobs:
       - name: Run Secret Leak Scan
         run: npm run scan:secrets
 
-      - name: Run Jest Test Suite (53 Passing Tests)
+      - name: Run Jest Test Suite
         run: npm test
 
       - name: Verify TypeScript Build
         run: npm run build
 
-      - name: Trigger Render Deploy Hook
+      - name: Trigger Render Deploy Hook (Optional)
         run: |
-          echo "🚀 Triggering Render Production Deployment..."
-          curl -s -X POST "https://api.render.com/deploy/srv-daque3vavr4c73f2ubl0?key=pXiyQSna7p4" -o deploy_response.json
-          cat deploy_response.json
-          echo "✅ Render deployment successfully queued!"
+          if [ -n "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+            echo "🚀 Triggering Render Production Deployment via Deploy Hook..."
+            curl -s -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" -o deploy_response.json
+            cat deploy_response.json
+            echo "✅ Render deployment successfully queued!"
+          else
+            echo "ℹ️ RENDER_DEPLOY_HOOK_URL secret not configured. Render deploys automatically on push to main."
+          fi
