@@ -1,0 +1,47 @@
+name: Security Audit, Testing Suite & Automated Safeguards
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run every Monday morning at 05:00 UTC (10:30 AM IST)
+    - cron: '0 5 * * 1'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab anytime
+
+jobs:
+  security-and-qa:
+    name: Rigorous Security & QA Pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Production & Dev Dependencies
+        run: npm ci
+
+      - name: 1. Deep Secret & PII Exposure Scan
+        run: npm run scan:secrets
+
+      - name: 2. Dependency Vulnerability Audit
+        run: npm run audit:check
+
+      - name: 3. Core Unit & Integration Testing Suite (Jest)
+        run: npm test
+
+      - name: 4. Verify Production TypeScript Build & Compile Assets
+        run: npm run build
+
+      - name: 5. Install Playwright Headless Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: 6. End-to-End Donor Journey Testing Suite (Playwright)
+        run: npm run test:e2e

@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Production Build
+dist/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+.admin_credentials.json
+
+# Database Files & SQLite WAL
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db
+donations.sqlite*
+
+# Security Keys & Certificates
+*.key
+*.pem
+*.pub
+oci_key*
+
+# Backup Snapshots & Ledger Mirror (retain directory structure)
+backups/*.sqlite
+backups/*.jsonl
+!backups/.gitkeep
+
+# Operational Logs (retain directory structure)
+logs/*.log
+logs/*.bak
+!logs/.gitkeep
+
+# OS / Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Confidential Institutional & Personal Records (Local Only)
+docs/institutional-records/
+docs/institutional-records/**
+
+# Test Coverage & Automation Reports
+coverage/
+playwright-report/
+test-results/

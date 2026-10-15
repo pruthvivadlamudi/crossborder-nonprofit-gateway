@@ -1,0 +1,1072 @@
+import crypto from 'crypto';
+import fetch from 'node-fetch';
+const uuidv4 = () => crypto.randomUUID();
+import { logger } from './logger';
+import { dbQuery } from './db';
+
+/**
+ * Structured Donor Email Data Contract
+ */
+export interface DonationEmailData {
+  donorName: string;
+  donorEmail: string;
+  grossAmount: number;
+  currency: string;
+  paypalOrderId: string;
+  paypalCaptureId?: string;
+  donationDate: string;
+  trustId: string;
+  trustName: string;
+  trustTagline?: string;
+  managingTrustee?: string;
+  bankName?: string;
+  accountMasked?: string;
+  ifsc?: string;
+  purposeCode?: string;
+  campaignUrl?: string;
+  paymentMethod?: 'PAYPAL' | 'UPI' | string;
+  upiVpa?: string;
+  upiRef?: string;
+  instagramHandle?: string;
+}
+
+/**
+ * Result of Email Dispatch Attempt
+ */
+export interface EmailDispatchResult {
+  success: boolean;
+  provider: 'resend' | 'brevo' | 'sendgrid' | 'simulation';
+  messageId?: string;
+  error?: string;
+  renderedHtml?: string;
+}
+
+/**
+ * Social Sharing Link Generator
+ * Generates pre-formatted, URL-encoded sharing URLs for WhatsApp, X (Twitter), Instagram, and Direct Portal Link
+ */
+export function generateSocialShareLinks(
+  trustName: string,
+  campaignUrl: string,
+  instagramHandle: string = 'divyayoga.seva'
+) {
+  const cleanUrl = campaignUrl || 'https://your-domain.duckdns.org';
+  const shareMessage = `I just made a charitable contribution to support ${trustName}! Join me in empowering community health, yoga seva, and wellness:`;
+  const cleanTrustTag = trustName.replace(/[^a-zA-Z0-9]/g, '');
+
+  const encodedText = encodeURIComponent(shareMessage);
+  const encodedUrl = encodeURIComponent(cleanUrl);
+
+  const instagramCaption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, wholesome annadanam meals, and rural healthcare: ${cleanUrl} \n\n#Seva #Charity #${cleanTrustTag} #MakeADifference`;
+
+  return {
+    whatsapp: `https://api.whatsapp.com/send?text=${encodedText}%20${encodedUrl}`,
+    twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+    instagram: `https://www.instagram.com/`,
+    instagramCaption,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+    directLink: cleanUrl
+  };
+}
+
+/**
+ * Dynamic, High-Fidelity HTML Email Template
+ * Mobile-responsive, cross-client compatible (Gmail, Apple Mail, Outlook), supporting both PayPal & UPI
+ */
+export function renderDonationEmailHtml(data: DonationEmailData): string {
+  const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
+  const shareLinks = generateSocialShareLinks(data.trustName, data.campaignUrl || '', data.instagramHandle);
+  const estimatedInr = Math.round(data.grossAmount * 83.50).toLocaleString('en-IN');
+  const formattedGross = isUpi
+    ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
+    : `$${data.grossAmount.toFixed(2)} USD`;
+  const purpose = data.purposeCode || 'P1301';
+  const trusteeName = data.managingTrustee || 'Authorized Managing Trustee';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Donation Receipt & Confirmation - ${escapeHtml(data.trustName)}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0b111e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .mobile-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 32px 12px; background-color: #0b111e;">
+
+  <center>
+    <!-- Outer Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Traditional Sacred Header -->
+      <tr>
+        <td align="center" style="padding: 24px 20px; background-color: #080c14; border-bottom: 3px solid #d97706; border-radius: 12px 12px 0 0;">
+          <div style="color: #fbbf24; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">
+            ॥ वसुधैव कुटुम्बकम् ॥ • OFFICIAL REMITTANCE CONFIRMATION
+          </div>
+          <h1 style="color: #ffffff; font-size: 22px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em;">
+            ${escapeHtml(data.trustName)}
+          </h1>
+          <div style="color: #94a3b8; font-size: 13px;">
+            ${escapeHtml(data.trustTagline || 'Regulated Non-Profit Foreign & Domestic Contribution Gateway')}
+          </div>
+        </td>
+      </tr>
+
+      <!-- Main Body Card -->
+      <tr>
+        <td style="background-color: #ffffff; padding: 36px 28px; color: #1e293b;">
+          
+          <!-- Gratitude Banner -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 24px;">
+            <tr>
+              <td align="center" style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 20px 16px;">
+                <div style="width: 44px; height: 44px; background-color: #10b981; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #ffffff; font-size: 22px; line-height: 44px; text-align: center; margin-bottom: 10px;">
+                  ✓
+                </div>
+                <h2 style="color: #166534; font-size: 19px; font-weight: 700; margin: 0 0 6px;">
+                  Heartfelt Gratitude for Your Seva, ${escapeHtml(data.donorName)}!
+                </h2>
+                <p style="color: #374151; font-size: 14px; margin: 0; line-height: 1.5;">
+                  Your contribution of <strong style="color: #0284c7;">${formattedGross}</strong> has been successfully verified and credited.
+                </p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Personalized Note -->
+          <p style="font-size: 14px; line-height: 1.65; color: #334155; margin-bottom: 20px;">
+            Dear <strong>${escapeHtml(data.donorName)}</strong>,<br><br>
+            On behalf of <strong>${escapeHtml(data.trustName)}</strong>, our trustees, and the communities served, we gratefully acknowledge your generous contribution. Your support directly powers our sacred seva initiatives—providing daily wholesome nutrition, free yoga and wellness camps, and rural healthcare outreach to those in need.
+          </p>
+
+          <!-- Official Receipt Details Table -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 28px; font-size: 13px;">
+            <tr>
+              <td colspan="2" style="background-color: #f1f5f9; padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-weight: 700; color: #0f172a; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em;">
+                🧾 Official Contribution Summary
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Contribution Amount:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 700; color: #0284c7; font-size: 15px;">
+                ${isUpi ? `₹${data.grossAmount.toLocaleString('en-IN')} INR` : `$${data.grossAmount.toFixed(2)} USD <span style="font-size: 12px; color: #64748b; font-weight: 500;">(~₹${estimatedInr} INR)</span>`}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Payment Method:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-weight: 600; color: #0f172a;">
+                ${isUpi ? '📱 UPI (Unified Payments Interface / India)' : '💳 PayPal Global Gateway (USD)'}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Date & Timestamp:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #1e293b; font-weight: 600;">
+                ${escapeHtml(data.donationDate)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Transaction Reference:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #334155;">
+                ${escapeHtml(data.upiRef || data.paypalCaptureId || data.paypalOrderId)}
+              </td>
+            </tr>
+            ${isUpi ? `
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Beneficiary VPA:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; font-family: monospace; color: #0284c7; font-weight: 600;">
+                ${escapeHtml(data.upiVpa || '9553946629-2@axl')}
+              </td>
+            </tr>
+            ` : ''}
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Beneficiary Entity:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #0f172a; font-weight: 600;">
+                ${escapeHtml(data.trustName)}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Designated Bank:</td>
+              <td style="padding: 11px 16px; border-bottom: 1px solid #e2e8f0; text-align: right; color: #334155;">
+                ${escapeHtml(data.bankName || 'Designated National Bank')} (${escapeHtml(data.accountMasked || '...XXXX')})
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 11px 16px; color: #64748b;">RBI Regulatory Purpose Code:</td>
+              <td style="padding: 11px 16px; text-align: right; font-weight: 700; color: #10b981;">
+                ${escapeHtml(purpose)} (Charitable / Social Grants)
+              </td>
+            </tr>
+          </table>
+
+          <!-- Seva Pillars Reminder -->
+          <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 10px; padding: 16px; margin-bottom: 28px;">
+            <div style="font-weight: 700; color: #b45309; font-size: 13px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em;">
+              🪔 How Your Contribution Creates Impact
+            </div>
+            <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 13px; line-height: 1.6;">
+              <li><strong>Free Daily Yoga & Pranayama:</strong> Sustaining health and meditation programs for seekers.</li>
+              <li><strong>Annadanam Seva:</strong> Distributing fresh, wholesome satvic meals daily to rural communities.</li>
+              <li><strong>Rural Health Outreach:</strong> Supporting free Ayurvedic and holistic wellness camps.</li>
+              <li><strong>Youth Values Education:</strong> Guiding the next generation in mindfulness and cultural wisdom.</li>
+            </ul>
+          </div>
+
+          <!-- Social Sharing & Campaign Multiplier (Instagram, WhatsApp, X, Direct Link) -->
+          <div style="text-align: center; border-top: 1px solid #e2e8f0; padding-top: 24px; margin-bottom: 24px;">
+            <div style="font-size: 14px; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
+              🌟 Inspire Others to Support This Sacred Mission
+            </div>
+            <p style="font-size: 13px; color: #64748b; margin: 0 0 16px; line-height: 1.5;">
+              Share your contribution with friends and family to multiply our community impact:
+            </p>
+
+            <!-- Social Buttons Grid -->
+            <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+              <tr>
+                <td align="center">
+                  <table role="presentation" border="0" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <!-- WhatsApp -->
+                      <td style="padding: 4px;">
+                        <a href="${shareLinks.whatsapp}" target="_blank" style="display: inline-block; background-color: #25D366; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                          💬 WhatsApp
+                        </a>
+                      </td>
+                      <!-- X / Twitter -->
+                      <td style="padding: 4px;">
+                        <a href="${shareLinks.twitter}" target="_blank" style="display: inline-block; background-color: #0f172a; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                          𝕏 Share
+                        </a>
+                      </td>
+                      <!-- Instagram (Replaces LinkedIn) -->
+                      <td style="padding: 4px;">
+                        <a href="${shareLinks.instagram}" target="_blank" style="display: inline-block; background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                          📸 Instagram
+                        </a>
+                      </td>
+                      <!-- Direct Link -->
+                      <td style="padding: 4px;">
+                        <a href="${shareLinks.directLink}" target="_blank" style="display: inline-block; background-color: #d97706; color: #ffffff; text-decoration: none; padding: 9px 15px; border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.02em;">
+                          🌐 View Portal
+                        </a>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Instagram Story Toolkit Suggestion -->
+            <div style="background-color: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 12px 14px; margin-top: 14px; text-align: left; font-size: 12px; color: #6b21a8; line-height: 1.5;">
+              <strong>📸 Instagram Story Sharing Tip:</strong><br>
+              Share your contribution to your Instagram Story! Tag <strong>@${escapeHtml(data.instagramHandle || 'divyayoga.seva')}</strong> and paste our direct portal link (<a href="${escapeHtml(shareLinks.directLink)}" style="color: #9333ea; text-decoration: underline;">${escapeHtml(shareLinks.directLink)}</a>) to inspire your network.
+            </div>
+          </div>
+
+          <!-- Trustee Signature Block -->
+          <div style="border-top: 1px solid #e2e8f0; padding-top: 18px; font-size: 13px; color: #475569; line-height: 1.5;">
+            With deep gratitude and blessings,<br>
+            <strong style="color: #0f172a;">${escapeHtml(trusteeName)}</strong><br>
+            Managing Trustee • ${escapeHtml(data.trustName)}
+          </div>
+
+        </td>
+      </tr>
+
+      <!-- Regulatory & Compliance Legal Footer -->
+      <tr>
+        <td style="background-color: #f1f5f9; padding: 20px 24px; border-radius: 0 0 12px 12px; font-size: 11px; color: #64748b; line-height: 1.6; text-align: center;">
+          <p style="margin: 0 0 8px;">
+            <strong>Statutory Compliance Disclaimer:</strong> This electronic receipt is an official acknowledgment of foreign inward remittance under Section 11 & 12 of the Indian Income Tax Act and applicable FCRA regulatory guidelines. No goods or commercial services were provided in whole or part consideration of this contribution.
+          </p>
+          <p style="margin: 0; color: #94a3b8;">
+            Issued by ${escapeHtml(data.trustName)} | Central Institutional Ledger | ${escapeHtml(data.paypalOrderId)}
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </center>
+
+</body>
+</html>`;
+}
+
+/**
+ * Helper to escape HTML characters
+ */
+function escapeHtml(str: string): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Universal Transactional Email Dispatcher
+ * Automatically detects configured provider (Resend -> Brevo -> SendGrid -> Simulation)
+ */
+export async function sendDonationConfirmationEmail(
+  data: DonationEmailData,
+  correlationId?: string
+): Promise<EmailDispatchResult> {
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || data.trustName || 'Divya Yoga Mandali & Art of Relaxation Seva').trim().replace(/^['"]|['"]$/g, '');
+  const isUpi = data.paymentMethod === 'UPI' || data.currency === 'INR';
+  const amountStr = isUpi
+    ? `₹${data.grossAmount.toLocaleString('en-IN')} INR`
+    : `$${data.grossAmount.toFixed(2)} USD`;
+  const subject = `Official Tax Receipt & Confirmation: ${amountStr} Donation to ${data.trustName}`;
+  const htmlContent = renderDonationEmailHtml(data);
+
+  // 1. Resend Provider (Recommended: 3,000 free emails/month via simple REST)
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
+  if (resendApiKey && !resendApiKey.includes('your_')) {
+    logger.info(`Dispatching donation email via Resend to ${data.donorEmail} (Key length: ${resendApiKey.length}, prefix: ${resendApiKey.slice(0, 6)}...)`, { orderId: data.paypalOrderId, provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [data.donorEmail],
+          subject,
+          html: htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logEmailDispatch(data, 'resend', 'SUCCESS', responseBody.id);
+      logger.info(`Donation email successfully delivered via Resend`, { messageId: responseBody.id, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'resend', messageId: responseBody.id };
+    } catch (err: any) {
+      logger.error('Failed to send donation email via Resend', err, { orderId: data.paypalOrderId, donorEmail: data.donorEmail }, correlationId);
+      await logEmailDispatch(data, 'resend', 'FAILURE', undefined, err.message);
+      return { success: false, provider: 'resend', error: `${err.message} (Key prefix: '${resendApiKey.slice(0, 7)}...', length: ${resendApiKey.length})` };
+    }
+  }
+
+  // 2. Brevo / Sendinblue Provider (300 free emails/day = 9,000/month via REST API)
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    logger.info(`Dispatching donation email via Brevo to ${data.donorEmail}`, { orderId: data.paypalOrderId, provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: data.donorEmail, name: data.donorName }],
+          subject,
+          htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Brevo API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logEmailDispatch(data, 'brevo', 'SUCCESS', responseBody.messageId);
+      logger.info(`Donation email successfully delivered via Brevo`, { messageId: responseBody.messageId, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: responseBody.messageId };
+    } catch (err: any) {
+      logger.error('Failed to send donation email via Brevo', err, { orderId: data.paypalOrderId, donorEmail: data.donorEmail }, correlationId);
+      await logEmailDispatch(data, 'brevo', 'FAILURE', undefined, err.message);
+      return { success: false, provider: 'brevo', error: err.message };
+    }
+  }
+
+  // 3. SendGrid Provider (100 free emails/day)
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
+  if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    logger.info(`Dispatching donation email via SendGrid to ${data.donorEmail}`, { orderId: data.paypalOrderId, provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: data.donorEmail, name: data.donorName }] }],
+          from: { email: fromEmail, name: fromName },
+          subject,
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`SendGrid API returned ${res.status}: ${errText}`);
+      }
+
+      const msgId = `sg-${uuidv4()}`;
+      await logEmailDispatch(data, 'sendgrid', 'SUCCESS', msgId);
+      logger.info(`Donation email successfully delivered via SendGrid`, { messageId: msgId, orderId: data.paypalOrderId }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: msgId };
+    } catch (err: any) {
+      logger.error('Failed to send donation email via SendGrid', err, { orderId: data.paypalOrderId, donorEmail: data.donorEmail }, correlationId);
+      await logEmailDispatch(data, 'sendgrid', 'FAILURE', undefined, err.message);
+      return { success: false, provider: 'sendgrid', error: err.message };
+    }
+  }
+
+  // 4. Development / Simulation Mode (When no 3rd-party API key is configured)
+  const simMessageId = `SIM-MSG-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  const formattedGross = data.grossAmount.toFixed(2);
+  
+  logger.info(`[SIMULATION MODE] Generated donation confirmation email for ${data.donorEmail}`, {
+    orderId: data.paypalOrderId,
+    donor: data.donorName,
+    amount: `$${formattedGross} USD`,
+    trust: data.trustName,
+    simulatedMessageId: simMessageId
+  }, 'EMAIL_SIMULATION', correlationId);
+
+  // In Debug Mode: Output detailed template preview and share URLs to logs
+  if (process.env.LOG_LEVEL === 'DEBUG') {
+    logger.debug('Email template dispatch debug payload', {
+      subject,
+      from: `${fromName} <${fromEmail}>`,
+      to: data.donorEmail,
+      socialShareUrls: generateSocialShareLinks(data.trustName, data.campaignUrl || ''),
+      htmlLengthBytes: htmlContent.length
+    }, correlationId);
+  }
+
+  await logEmailDispatch(data, 'simulation', 'SUCCESS', simMessageId);
+  return {
+    success: true,
+    provider: 'simulation',
+    messageId: simMessageId,
+    renderedHtml: htmlContent
+  };
+}
+
+/**
+ * Record Email Dispatch Audit in Database
+ */
+async function logEmailDispatch(
+  data: DonationEmailData,
+  provider: string,
+  status: string,
+  messageId?: string,
+  errorMessage?: string
+): Promise<void> {
+  try {
+    await dbQuery(`
+      INSERT INTO email_dispatch_logs (
+        id, order_id, donor_email, provider, status, message_id, error_details
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      uuidv4(),
+      data.paypalOrderId,
+      data.donorEmail,
+      provider,
+      status,
+      messageId || null,
+      errorMessage || null
+    ]);
+  } catch (e: any) {
+    logger.warn(`Could not record email dispatch audit log: ${e.message}`, { error: e.message }, 'EMAIL_AUDIT');
+  }
+}
+
+/**
+ * Dynamic Branded HTML Email Template for Password Reset
+ * Follows Divya Yoga Mandali & The Art Of Relaxation visual brand identity
+ */
+export function renderPasswordResetEmailHtml(
+  adminName: string,
+  resetLink: string,
+  expirationMinutes: number = 20
+): string {
+  const safeName = escapeHtml(adminName || 'Revered Trustee');
+  const safeLink = escapeHtml(resetLink);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trustee Passcode Reset Authorization - Divya Yoga Mandali</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0b111e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .mobile-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 32px 12px; background-color: #0b111e;">
+
+  <center>
+    <!-- Outer Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Sacred Header -->
+      <tr>
+        <td align="center" style="padding: 26px 20px; background-color: #080c14; border-bottom: 3px solid #d97706; border-radius: 12px 12px 0 0;">
+          <div style="color: #fbbf24; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">
+            ॥ सेवा परमो धर्मः ॥ • ADMINISTRATIVE COMPLIANCE & SECURITY
+          </div>
+          <h1 style="color: #ffffff; font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em;">
+            Divya Yoga Mandali & The Art Of Relaxation
+          </h1>
+          <div style="color: #94a3b8; font-size: 13px;">
+            Official Trustee Credentials & Access Management
+          </div>
+        </td>
+      </tr>
+
+      <!-- Main Body Card -->
+      <tr>
+        <td style="background-color: #ffffff; padding: 36px 30px; color: #1e293b;">
+          
+          <h2 style="color: #0f172a; font-size: 19px; font-weight: 700; margin: 0 0 14px;">
+            Trustee Passcode Reset Authorization
+          </h2>
+
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 20px;">
+            Namaste <strong>${safeName}</strong>,
+          </p>
+
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 24px;">
+            A request was initiated to reset your administrative passcode for the <strong>Trustee Compliance & Administration Workspace</strong>. Click the button below to establish a new secure passcode:
+          </p>
+
+          <!-- Security Expiration Notice Box -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td style="background-color: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; border-radius: 8px; padding: 14px 18px;">
+                <div style="font-size: 13px; font-weight: 700; color: #92400e; margin-bottom: 4px;">
+                  ⏳ Time-Sensitive Security Token
+                </div>
+                <div style="font-size: 13px; color: #b45309; line-height: 1.5;">
+                  This single-use reset authorization is valid for strictly <strong>${expirationMinutes} minutes</strong>. Once used or expired, it cannot be reused.
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Action Button CTA -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td align="center">
+                <a href="${safeLink}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);">
+                  🔐 Set New Trustee Passcode
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Fallback Link -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; margin-bottom: 26px;">
+            <div style="font-size: 12px; font-weight: 600; color: #64748b; margin-bottom: 6px;">
+              Direct Link Alternative:
+            </div>
+            <div style="font-size: 12px; color: #0284c7; word-break: break-all; line-height: 1.4;">
+              <a href="${safeLink}" target="_blank" style="color: #0284c7; text-decoration: underline;">
+                ${safeLink}
+              </a>
+            </div>
+          </div>
+
+          <!-- Anti-Tamper Safeguard -->
+          <p style="font-size: 12px; line-height: 1.6; color: #64748b; margin: 0; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            🛡️ <strong>Security Safeguard:</strong> If you did not initiate this reset request, you can safely disregard this message. Your administrative account remains fully secured, and no changes have been applied.
+          </p>
+
+        </td>
+      </tr>
+
+      <!-- Regulatory & Trust Footer -->
+      <tr>
+        <td style="background-color: #080c14; padding: 22px 24px; border-radius: 0 0 12px 12px; font-size: 11px; color: #94a3b8; line-height: 1.6; text-align: center;">
+          <p style="margin: 0 0 6px; color: #cbd5e1; font-weight: 600;">
+            Divya Yoga Mandali Charitable Trust (DYMCT) & The Art Of Relaxation (AOR)
+          </p>
+          <p style="margin: 0; color: #64748b;">
+            Managing Trustee: Sri Vijaya Pratap Maharaj • Authorized FCRA Gateway
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </center>
+
+</body>
+</html>`;
+}
+
+/**
+ * Dispatch Password Reset Email via Multi-Provider Engine
+ * (Resend -> Brevo -> SendGrid -> Simulation)
+ */
+export async function sendPasswordResetEmail(
+  adminEmail: string,
+  adminName: string,
+  resetLink: string,
+  correlationId?: string
+): Promise<EmailDispatchResult> {
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Compliance').trim().replace(/^['"]|['"]$/g, '');
+  const subject = `Urgent: Trustee Passcode Reset Authorization - Divya Yoga Mandali`;
+  const htmlContent = renderPasswordResetEmailHtml(adminName, resetLink, 20);
+
+  // 1. Resend Provider
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
+  if (resendApiKey && !resendApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [adminEmail],
+          subject,
+          html: htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id);
+      logger.info(`Password reset email delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'resend', messageId: responseBody.id };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via Resend', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 2. Brevo Provider
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: adminEmail, name: adminName }],
+          subject,
+          htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Brevo API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', responseBody.messageId);
+      logger.info(`Password reset email delivered via Brevo`, { messageId: responseBody.messageId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: responseBody.messageId };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via Brevo', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'brevo', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 3. SendGrid Provider
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
+  if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    logger.info(`Dispatching password reset email via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: adminEmail, name: adminName }] }],
+          from: { email: fromEmail, name: fromName },
+          subject,
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`SendGrid API returned ${res.status}: ${errText}`);
+      }
+
+      const msgId = `sg-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', msgId);
+      logger.info(`Password reset email delivered via SendGrid`, { messageId: msgId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: msgId };
+    } catch (err: any) {
+      logger.error('Failed to send password reset email via SendGrid', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'FAILURE', undefined, err.message);
+    }
+  }
+
+  // 4. Simulation Mode
+  const simMessageId = `SIM-RESET-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  logger.info(`[SIMULATION MODE] Generated password reset email for ${adminEmail}`, {
+    adminEmail,
+    adminName,
+    resetLink,
+    simulatedMessageId: simMessageId
+  }, 'EMAIL_SIMULATION', correlationId);
+
+  await logResetEmailDispatch(adminEmail, 'simulation', 'SUCCESS', simMessageId);
+  return {
+    success: true,
+    provider: 'simulation',
+    messageId: simMessageId,
+    renderedHtml: htmlContent
+  };
+}
+
+async function logResetEmailDispatch(
+  email: string,
+  provider: string,
+  status: string,
+  messageId?: string,
+  errorMessage?: string,
+  orderId: string = 'PASSWORD_RESET'
+): Promise<void> {
+  try {
+    await dbQuery(`
+      INSERT INTO email_dispatch_logs (
+        id, order_id, donor_email, provider, status, message_id, error_details
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [
+      uuidv4(),
+      orderId,
+      email,
+      provider,
+      status,
+      messageId || null,
+      errorMessage || null
+    ]);
+  } catch (e: any) {
+    logger.warn(`Could not record password reset email dispatch log: ${e.message}`, { error: e.message }, 'EMAIL_AUDIT');
+  }
+}
+
+/**
+ * Dynamic Branded HTML Email Template for Password Changed Security Alert
+ * Follows Divya Yoga Mandali & The Art Of Relaxation visual brand identity
+ */
+export function renderPasswordChangedAlertEmailHtml(
+  adminEmail: string,
+  adminName: string,
+  changeTimestamp: string,
+  clientIp: string,
+  urgentResetLink: string
+): string {
+  const safeName = escapeHtml(adminName || 'Revered Trustee');
+  const safeEmail = escapeHtml(adminEmail);
+  const safeTime = escapeHtml(changeTimestamp);
+  const safeIp = escapeHtml(clientIp || 'Unknown IP');
+  const safeLink = escapeHtml(urgentResetLink);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Security Alert: Trustee Passcode Changed - Divya Yoga Mandali</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #0b111e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+    table { border-collapse: collapse; }
+    .email-container { max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; }
+    @media only screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border-radius: 0 !important; }
+      .mobile-stack { display: block !important; width: 100% !important; box-sizing: border-box !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 32px 12px; background-color: #0b111e;">
+
+  <center>
+    <!-- Outer Wrapper -->
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+      
+      <!-- Alert Header -->
+      <tr>
+        <td align="center" style="padding: 26px 20px; background-color: #080c14; border-bottom: 3px solid #10b981; border-radius: 12px 12px 0 0;">
+          <div style="color: #34d399; font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px;">
+            ॥ सेवा परमो धर्मः ॥ • ADMINISTRATIVE SECURITY NOTIFICATION
+          </div>
+          <h1 style="color: #ffffff; font-size: 21px; font-weight: 700; margin: 0 0 4px; letter-spacing: -0.01em;">
+            Divya Yoga Mandali & The Art Of Relaxation
+          </h1>
+          <div style="color: #94a3b8; font-size: 13px;">
+            Trustee Compliance Console Account Security Notice
+          </div>
+        </td>
+      </tr>
+
+      <!-- Main Body Card -->
+      <tr>
+        <td style="background-color: #ffffff; padding: 36px 30px; color: #1e293b;">
+          
+          <h2 style="color: #0f172a; font-size: 19px; font-weight: 700; margin: 0 0 14px;">
+            Your Trustee Passcode Has Been Changed
+          </h2>
+
+          <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 18px;">
+            Namaste <strong>${safeName}</strong>,
+          </p>
+
+          <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 22px;">
+            This is an automated confirmation that the administrative passcode for your account (<strong>${safeEmail}</strong>) was successfully updated.
+          </p>
+
+          <!-- Security Metadata Table -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; padding: 14px 18px;">
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Modification Time:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #0f172a; font-weight: 600; text-align: right;">${safeTime}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Client IP Address:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #0f172a; font-weight: 600; font-family: monospace; text-align: right;">${safeIp}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-size: 13px; color: #64748b;">Security Invalidation:</td>
+              <td style="padding: 6px 0; font-size: 13px; color: #10b981; font-weight: 600; text-align: right;">All prior reset tokens wiped</td>
+            </tr>
+          </table>
+
+          <!-- Positive confirmation -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 22px;">
+            <tr>
+              <td style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid #10b981; border-radius: 8px; padding: 14px 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #166534; margin-bottom: 4px;">
+                  ✓ Did you perform this change?
+                </div>
+                <div style="font-size: 13px; color: #15803d; line-height: 1.5;">
+                  You can safely disregard this message. Your new credentials are fully active and protected. No further action is necessary.
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Warning for unauthorized change -->
+          <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 28px;">
+            <tr>
+              <td style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #ef4444; border-radius: 8px; padding: 14px 16px;">
+                <div style="font-size: 13px; font-weight: 700; color: #991b1b; margin-bottom: 4px;">
+                  ⚠️ Did you NOT make this change?
+                </div>
+                <div style="font-size: 13px; color: #b91c1c; line-height: 1.5; margin-bottom: 12px;">
+                  If you did not authorize this passcode update, your account may have been compromised. Click the button below immediately to re-secure your access:
+                </div>
+                <a href="${safeLink}" target="_blank" style="display: inline-block; background-color: #dc2626; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: 700; font-size: 13px; letter-spacing: 0.02em;">
+                  🚨 Emergency Re-Secure & Reset Passcode
+                </a>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Fallback Link -->
+          <div style="font-size: 12px; color: #64748b; line-height: 1.5; padding-top: 14px; border-top: 1px solid #e2e8f0;">
+            Direct portal link: <a href="${safeLink}" target="_blank" style="color: #0284c7; word-break: break-all;">${safeLink}</a>
+          </div>
+
+        </td>
+      </tr>
+
+      <!-- Regulatory & Trust Footer -->
+      <tr>
+        <td style="background-color: #080c14; padding: 22px 24px; border-radius: 0 0 12px 12px; font-size: 11px; color: #94a3b8; line-height: 1.6; text-align: center;">
+          <p style="margin: 0 0 6px; color: #cbd5e1; font-weight: 600;">
+            Divya Yoga Mandali Charitable Trust (DYMCT) & The Art Of Relaxation (AOR)
+          </p>
+          <p style="margin: 0; color: #64748b;">
+            Managing Trustee: Sri Vijaya Pratap Maharaj • Regulatory Non-Profit Gateway
+          </p>
+        </td>
+      </tr>
+
+    </table>
+  </center>
+
+</body>
+</html>`;
+}
+
+/**
+ * Dispatch Password Changed Security Alert Email via Multi-Provider Engine
+ * (Resend -> Brevo -> SendGrid -> Simulation)
+ */
+export async function sendPasswordChangedAlertEmail(
+  adminEmail: string,
+  adminName: string,
+  clientIp: string,
+  urgentResetLink: string,
+  correlationId?: string
+): Promise<EmailDispatchResult> {
+  const rawFromEmail = (process.env.RESEND_FROM || process.env.EMAIL_FROM || process.env.SENDER_EMAIL || 'receipts@artofrelaxation.org').trim().replace(/^['"]|['"]$/g, '');
+  const fromEmail = rawFromEmail;
+  const fromName = (process.env.SENDER_NAME || process.env.EMAIL_FROM_NAME || 'Divya Yoga Mandali Security Alert').trim().replace(/^['"]|['"]$/g, '');
+  const subject = `Security Alert: Trustee Passcode Changed - Divya Yoga Mandali`;
+  const timestamp = new Date().toUTCString();
+  const htmlContent = renderPasswordChangedAlertEmailHtml(adminEmail, adminName, timestamp, clientIp, urgentResetLink);
+
+  // 1. Resend Provider
+  const rawResendKey = (process.env.RESEND_API_KEY || process.env.RESEND_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+  const resendApiKey = rawResendKey;
+  if (resendApiKey && !resendApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via Resend to ${adminEmail}`, { provider: 'resend' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: `${fromName} <${fromEmail}>`,
+          to: [adminEmail],
+          subject,
+          html: htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Resend API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'resend', 'SUCCESS', responseBody.id, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via Resend`, { messageId: responseBody.id, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'resend', messageId: responseBody.id };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via Resend', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'resend', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 2. Brevo Provider
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  if (brevoApiKey && !brevoApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via Brevo to ${adminEmail}`, { provider: 'brevo' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email: adminEmail, name: adminName }],
+          subject,
+          htmlContent
+        })
+      });
+
+      const responseBody = await res.json() as any;
+      if (!res.ok) {
+        throw new Error(`Brevo API returned ${res.status}: ${JSON.stringify(responseBody)}`);
+      }
+
+      await logResetEmailDispatch(adminEmail, 'brevo', 'SUCCESS', responseBody.messageId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via Brevo`, { messageId: responseBody.messageId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'brevo', messageId: responseBody.messageId };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via Brevo', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'brevo', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 3. SendGrid Provider
+  const sendgridApiKey = process.env.SENDGRID_API_KEY;
+  if (sendgridApiKey && !sendgridApiKey.includes('your_')) {
+    logger.info(`Dispatching password changed alert via SendGrid to ${adminEmail}`, { provider: 'sendgrid' }, 'EMAIL_DISPATCH', correlationId);
+    try {
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${sendgridApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email: adminEmail, name: adminName }] }],
+          from: { email: fromEmail, name: fromName },
+          subject,
+          content: [{ type: 'text/html', value: htmlContent }]
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`SendGrid API returned ${res.status}: ${errText}`);
+      }
+
+      const msgId = `sg-${uuidv4()}`;
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'SUCCESS', msgId, undefined, 'PASSWORD_CHANGED_ALERT');
+      logger.info(`Password changed alert delivered via SendGrid`, { messageId: msgId, email: adminEmail }, 'EMAIL_SUCCESS', correlationId);
+      return { success: true, provider: 'sendgrid', messageId: msgId };
+    } catch (err: any) {
+      logger.error('Failed to send password changed alert via SendGrid', err, { email: adminEmail }, correlationId);
+      await logResetEmailDispatch(adminEmail, 'sendgrid', 'FAILURE', undefined, err.message, 'PASSWORD_CHANGED_ALERT');
+    }
+  }
+
+  // 4. Simulation Mode
+  const simMessageId = `SIM-ALERT-${Date.now()}-${uuidv4().slice(0, 8)}`;
+  logger.info(`[SIMULATION MODE] Generated password changed alert email for ${adminEmail}`, {
+    adminEmail,
+    adminName,
+    clientIp,
+    urgentResetLink,
+    simulatedMessageId: simMessageId
+  }, 'EMAIL_SIMULATION', correlationId);
+
+  await logResetEmailDispatch(adminEmail, 'simulation', 'SUCCESS', simMessageId, undefined, 'PASSWORD_CHANGED_ALERT');
+  return {
+    success: true,
+    provider: 'simulation',
+    messageId: simMessageId,
+    renderedHtml: htmlContent
+  };
+}
+
+

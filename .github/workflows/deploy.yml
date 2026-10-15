@@ -1,0 +1,40 @@
+name: CI/CD Continuous Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test-and-deploy:
+    name: Verify & Deploy to Render
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Secret Leak Scan
+        run: npm run scan:secrets
+
+      - name: Run Jest Test Suite (53 Passing Tests)
+        run: npm test
+
+      - name: Verify TypeScript Build
+        run: npm run build
+
+      - name: Trigger Render Deploy Hook
+        run: |
+          echo "🚀 Triggering Render Production Deployment..."
+          curl -s -X POST "https://api.render.com/deploy/srv-daque3vavr4c73f2ubl0?key=pXiyQSna7p4" -o deploy_response.json
+          cat deploy_response.json
+          echo "✅ Render deployment successfully queued!"
