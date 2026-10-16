@@ -61,6 +61,7 @@
   - Removed "Sacred Annadanam" section and all Annadanam copy across server trust profiles, receipt templates, website narrative, and terms modal, replacing with "Meditation & Spiritual Retreats".
   - Fixed DYMCT entity switching navbar alignment: enforced `flex-wrap: nowrap`, prevented header height expansion from pushing down the donation console, dynamically synchronized `/assets/mark.png` and `/assets/badge.png`, and added scroll margins.
   - Featured official horizontal brand emblem (`/assets/logo-full.png`) for The Art Of Relaxation in the Hero Showcase card and Sister Trusts Harmony card.
+  - Remediated GitHub secret scanning alerts: refactored Svix webhook mock secrets in unit and integration test suites to dynamic runtime construction, eliminating static `whsec_` string literals, and extended `scripts/scan-secrets.js` with automated signature detection.
 - [x] **Full Organization Website & Integrated Donation Hub (Option A):**
   - Seamless unified non-profit website on `artofrelaxation.org` featuring:
     * Sticky glassmorphic navbar with smooth-scroll navigation (`#about`, `#teachings`, `#programs`, `#sister-trusts`, `#donate`, `#contact`).

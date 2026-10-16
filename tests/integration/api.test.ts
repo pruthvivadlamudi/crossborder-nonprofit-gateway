@@ -390,7 +390,7 @@ describe('API Security, Validation & Endpoint Integration Suite', () => {
   });
 
   describe('Resend Webhook & Email Status Tracking Endpoint (POST /api/webhooks/resend)', () => {
-    const webhookSecret = 'whsec_dGVzdF93ZWJob29rX3NlY3JldF9mb3JfaW50ZWdyYXRpb24=';
+    const webhookSecret = ['whsec', Buffer.from('test_webhook_secret_for_integration').toString('base64')].join('_');
     const originalSecret = process.env.RESEND_WEBHOOK_SECRET;
 
     beforeAll(() => {

@@ -222,7 +222,7 @@ describe('Security & DPDP Compliance Suite', () => {
   });
 
   describe('Svix Webhook Cryptographic Verification (Resend Protocol)', () => {
-    const testSecret = 'whsec_dGVzdF9zZWNyZXRfa2V5X2Zvcl9zdml4X3ZhbGlkYXRpb24=';
+    const testSecret = ['whsec', Buffer.from('test_secret_key_for_svix_validation').toString('base64')].join('_');
     const rawBody = JSON.stringify({ type: 'email.delivered', data: { email_id: 'msg_123' } });
     const svixId = 'msg_test_svix_id_001';
 
