@@ -81,8 +81,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 12px;
+      flex-wrap: nowrap;
+      gap: 16px;
     }
 
     .nav-brand {
@@ -91,6 +91,9 @@
       gap: 12px;
       text-decoration: none;
       color: inherit;
+      flex-shrink: 0;
+      min-width: 0;
+      max-width: 340px;
     }
 
     .nav-brand-logo {
@@ -107,6 +110,8 @@
     .nav-title-group {
       display: flex;
       flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .nav-sanskrit {
@@ -114,6 +119,9 @@
       color: #fbbf24;
       font-weight: 700;
       letter-spacing: 0.05em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .nav-brand-name {
@@ -122,15 +130,47 @@
       font-weight: 700;
       color: #ffffff;
       letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .nav-links {
       display: flex;
       align-items: center;
-      gap: 18px;
+      gap: 16px;
       list-style: none;
       margin: 0;
       padding: 0;
+      flex-shrink: 0;
+    }
+
+    /* Official Art of Relaxation Emblem Card */
+    .hero-logo-banner {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 12px 28px;
+      margin: 0 auto 22px;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45), 0 0 24px rgba(217, 70, 239, 0.22);
+      border: 1px solid rgba(255, 255, 255, 0.95);
+      max-width: 90%;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .hero-logo-banner:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(217, 70, 239, 0.35);
+    }
+
+    .hero-logo-img {
+      max-height: 80px;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
     }
 
     .nav-link {
@@ -241,6 +281,7 @@
       justify-content: center;
       padding: 72px 20px;
       position: relative;
+      scroll-margin-top: 80px;
     }
 
     .section-container {
@@ -1533,7 +1574,7 @@
     }
 
     /* Mobile Optimization & Responsiveness */
-    @media (max-width: 992px) {
+    @media (max-width: 1040px) {
       .nav-links {
         display: none;
       }
@@ -1680,7 +1721,7 @@
 <header class="global-navbar">
   <div class="nav-container">
     <a href="#hero" class="nav-brand">
-      <img src="/assets/badge.png" alt="Trust Logo" class="nav-brand-logo">
+      <img src="/assets/mark.png" alt="Emblem" class="nav-brand-logo" id="nav-logo-img">
       <div class="nav-title-group">
         <span class="nav-sanskrit" id="nav-sanskrit-tag">॥ शान्तिः प्रशान्तिः परमा शान्तिः ॥</span>
         <span class="nav-brand-name" id="nav-brand-text">The Art Of Relaxation</span>
@@ -1692,7 +1733,6 @@
       <li><a href="#teachings" class="nav-link">Teachings</a></li>
       <li><a href="#programs" class="nav-link">Seva Programs</a></li>
       <li><a href="#sister-trusts" class="nav-link">Sister Trusts</a></li>
-      <li><a href="#transparency" class="nav-link">Transparency</a></li>
       <li><a href="#contact" class="nav-link">Contact</a></li>
     </ul>
 
@@ -1717,6 +1757,12 @@
   <section id="hero" class="hero-section">
     <div class="hero-container">
       <div class="hero-sanskrit-banner">॥ सर्वे भवन्तु सुखिनः सर्वे सन्तु निरामयाः ॥</div>
+      
+      <!-- Official Art of Relaxation Emblem Card -->
+      <div class="hero-logo-banner">
+        <img src="/assets/logo-full.png" alt="The Art Of Relaxation - Sri Vijaya Pratap Maharaj" class="hero-logo-img">
+      </div>
+
       <div class="section-tag" style="margin-bottom: 16px;">
         <span>🪷</span>
         <span>A Sacred Spiritual & Humanitarian Mission</span>
@@ -1732,9 +1778,6 @@
         </a>
         <a href="#about" class="btn-hero-secondary">
           <span>🧘 Discover Our Teachings & Vision</span>
-        </a>
-        <a href="#transparency" class="btn-hero-secondary">
-          <span>🏛️ Statutory Integrity</span>
         </a>
       </div>
 
@@ -1800,7 +1843,7 @@
               </div>
             </div>
             <p style="font-size: 0.86rem; color: #94a3b8; line-height: 1.6; margin: 0;">
-              We believe inner peace without outer service is incomplete, and external action without internal silence leads to exhaustion. By integrating meditation with Annadanam and rural welfare, we nurture balanced, harmonious lives.
+              We believe inner peace without outer service is incomplete, and external action without internal silence leads to exhaustion. By integrating meditation with rural community outreach and holistic wellness, we nurture balanced, harmonious lives.
             </p>
           </div>
         </div>
@@ -1857,15 +1900,7 @@
         <p class="section-subtitle-text">Every initiative is operated with zero administrative overhead deductions, delivering maximum direct impact.</p>
       </div>
 
-      <div class="features-grid-4">
-        <div class="feature-card-item">
-          <div class="feature-icon-circle">🍲</div>
-          <h3 class="feature-card-title">Sacred Annadanam</h3>
-          <p class="feature-card-desc">
-            Offering wholesome, pure vegetarian sattvic meals daily to spiritual seekers, pilgrims, rural elders, and underserved families. Food offered with sanctity and unconditional love.
-          </p>
-        </div>
-
+      <div class="features-grid-3">
         <div class="feature-card-item">
           <div class="feature-icon-circle">🧘‍♂️</div>
           <h3 class="feature-card-title">Meditation Retreats</h3>
@@ -1908,6 +1943,9 @@
       <div class="trust-harmony-grid">
         <div class="trust-harmony-card">
           <span class="trust-harmony-badge badge-primary-trust">Primary Brand & Wellness Seva</span>
+          <div style="background: #ffffff; border-radius: 14px; padding: 10px 20px; margin: 14px 0 16px; display: inline-flex; justify-content: center; align-items: center; box-shadow: 0 4px 16px rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.9);">
+            <img src="/assets/logo-full.png" alt="The Art Of Relaxation - Vijaya Pratap Maharaj" style="max-height: 48px; width: auto; max-width: 100%; object-fit: contain;">
+          </div>
           <h3 class="trust-harmony-title">The Art Of Relaxation</h3>
           <p class="trust-harmony-mission">
             Dedicated to modern stress relief, meditation retreats, mindful breathing workshops, and community holistic well-being.
@@ -1919,9 +1957,13 @@
 
         <div class="trust-harmony-card">
           <span class="trust-harmony-badge badge-sister-trust">Sister Registered Charitable Trust</span>
+          <div style="background: rgba(15, 23, 42, 0.85); border: 2px solid var(--gold-border); border-radius: 14px; padding: 8px 18px; margin: 14px 0 16px; display: inline-flex; justify-content: center; align-items: center; gap: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
+            <img src="/assets/badge.png" alt="Divya Yoga Mandali Charitable Trust" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">
+            <span style="font-family: var(--font-title); font-weight: 700; color: #fbbf24; font-size: 0.92rem;">॥ योगः कर्मसु कौशलम् ॥</span>
+          </div>
           <h3 class="trust-harmony-title">Divya Yoga Mandali Charitable Trust</h3>
           <p class="trust-harmony-mission">
-            Dedicated to classical yoga preservation, traditional Vedic sadhana, scriptural education, Annadanam meals, and rural welfare.
+            Dedicated to classical yoga preservation, traditional Vedic sadhana, scriptural education, meditation retreats, and rural welfare.
           </p>
           <div class="trust-spec-list">
             <div>Managing Trustee: <strong>Sri Vijaya Pratap Maharaj</strong></div>
@@ -1971,8 +2013,8 @@
 
       <!-- Centered Donation Header with Trust Identity -->
       <div style="text-align: center; margin: 12px 0 16px;">
-        <h2 id="ngo-name" class="traditional-heading" style="font-size: 1.45rem; margin-bottom: 4px;">Divya Yoga Mandali Charitable Trust</h2>
-        <div id="ngo-subtitle" class="traditional-subtitle" style="font-size: 0.85rem; margin-bottom: 0;">Vedic Wellness, Yoga Sadhana, Annadanam & Rural Community Upliftment</div>
+        <h2 id="ngo-name" class="traditional-heading" style="font-size: 1.45rem; margin-bottom: 4px;">The Art Of Relaxation</h2>
+        <div id="ngo-subtitle" class="traditional-subtitle" style="font-size: 0.85rem; margin-bottom: 0;">Preserving Ancient Yoga, Vedic Wisdom &amp; Rural Outreach</div>
       </div>
 
       <!-- Non-Profit Entity Identification Reference -->
@@ -2206,7 +2248,7 @@
         <div class="contact-card">
           <div class="contact-icon">💬</div>
           <h3 class="contact-title">WhatsApp & Community Seva</h3>
-          <p class="contact-desc">Connect directly for retreats, annadanam updates, and donation assistance.</p>
+          <p class="contact-desc">Connect directly for retreats, seva updates, and donation assistance.</p>
           <a href="https://api.whatsapp.com/send?phone=919553946629" target="_blank" class="contact-action-link">Open WhatsApp Chat ↗</a>
         </div>
       </div>
@@ -2339,7 +2381,7 @@
   <!-- BOTTOM COPYRIGHT BAR SECTION (MIRRORS REFERENCE STYLING EXACTLY) -->
   <div class="footer-copyright-bar">
     <div class="footer-copyright-inner">
-      <span class="footer-copyright-text">© 1999 - 2026 The Art Of Relaxation &amp; Divya Yoga Mandali Charitable Trust. All Rights Reserved.</span>
+      <span class="footer-copyright-text">© 2006 - 2026 The Art Of Relaxation &amp; Divya Yoga Mandali Charitable Trust. All Rights Reserved.</span>
       <span class="footer-pipe">|</span>
       <button type="button" class="footer-legal-btn" onclick="openLegalModal('terms');">Terms &amp; Conditions</button>
       <span class="footer-pipe">|</span>
@@ -2823,11 +2865,17 @@
     document.getElementById('tab-divya').classList.toggle('active', !isRelax);
     const navBrand = document.getElementById('nav-brand-text');
     const navSanskrit = document.getElementById('nav-sanskrit-tag');
+    const navLogo = document.getElementById('nav-logo-img');
     if (navBrand) {
-      navBrand.textContent = isRelax ? 'The Art Of Relaxation' : 'Divya Yoga Mandali Charitable Trust';
+      navBrand.textContent = isRelax ? 'The Art Of Relaxation' : 'Divya Yoga Mandali Trust';
+      navBrand.title = isRelax ? 'The Art Of Relaxation' : 'Divya Yoga Mandali Charitable Trust';
     }
     if (navSanskrit) {
       navSanskrit.textContent = isRelax ? '॥ शान्तिः प्रशान्तिः परमा शान्तिः ॥' : '॥ योगः कर्मसु कौशलम् ॥';
+    }
+    if (navLogo) {
+      navLogo.src = isRelax ? '/assets/mark.png' : '/assets/badge.png';
+      navLogo.alt = isRelax ? 'The Art Of Relaxation' : 'Divya Yoga Mandali';
     }
     loadTrustConfig(trustId);
   }
@@ -3070,7 +3118,7 @@
   function shareToInstagram() {
     const { trustName, campaignUrl, instaHandle } = getShareData();
     const cleanTag = trustName.replace(/[^a-zA-Z0-9]/g, '');
-    const caption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, wholesome annadanam meals, and rural healthcare: ${campaignUrl} \n\n#Seva #Charity #${cleanTag} #MakeADifference`;
+    const caption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, meditation retreats, and rural healthcare: ${campaignUrl} \n\n#Seva #Charity #${cleanTag} #MakeADifference`;
 
     navigator.clipboard.writeText(caption).then(() => {
       const box = document.getElementById('receipt-instagram-box');
@@ -3170,7 +3218,7 @@
       body.innerHTML = `
         <p style="margin-bottom: 12px;">Welcome to <strong>The Art Of Relaxation</strong> and <strong>Divya Yoga Mandali Charitable Trust</strong>. By accessing our portal or contributing to our non-profit seva initiatives, you acknowledge and agree to the following statutory terms:</p>
         <h4 style="color: #fbbf24; font-size: 0.95rem; margin: 14px 0 6px;">1. Voluntary Non-Profit Contributions</h4>
-        <p style="margin-bottom: 12px;">All contributions made via this gateway are voluntary donations dedicated solely to non-profit charitable, educational, spiritual, and rural welfare activities (including Annadanam daily nutrition distribution, yogic meditation retreats, and community wellness programs). Contributions are non-refundable once receipted.</p>
+        <p style="margin-bottom: 12px;">All contributions made via this gateway are voluntary donations dedicated solely to non-profit charitable, educational, spiritual, and rural welfare activities (including yogic meditation retreats, rural health camps, and community wellness programs). Contributions are non-refundable once receipted.</p>
         <h4 style="color: #fbbf24; font-size: 0.95rem; margin: 14px 0 6px;">2. Statutory Receipts &amp; Tax Compliance</h4>
         <p style="margin-bottom: 12px;">Donors eligible under Indian Income Tax Act Section 80G receive formal digital tax receipts dispatched automatically to their verified email. Foreign and NRI remittances are accepted strictly in adherence to Foreign Contribution Regulation Act (FCRA 2020 &amp; Rule 13) with authorized RBI purpose codes (P1109 / P1301).</p>
         <h4 style="color: #fbbf24; font-size: 0.95rem; margin: 14px 0 6px;">3. Direct Trust Settlement</h4>

@@ -56,12 +56,17 @@
   - Cleaned hero stats ribbon to 3 serene spiritual wellness pillars (Spiritual Lineage, Daily Meditation, Mindful Living).
   - Updated all Managing Trustee references to **Sri Vijaya Pratap Maharaj**.
   - Refined Footer Component to mirror reference design: removed obsolete left navigation links, newsletter subscription, and app download blocks; updated physical address to Hyderabad headquarters (Registered Trust Office, Hyderabad, Telangana, India); preserved official phone (+91 9553946629) and email channels; aligned social media icons (Facebook, X, LinkedIn, YouTube, Instagram) and "All Social Media Handles" link; added solid dark opaque background (zero top transparency); added full-width divider with pipe-separated copyright bar and interactive modals for Terms & Conditions and Privacy Policy; fully optimized responsive stacking for mobile screens (< 768px down to 320px).
+  - Updated copyright notice to `© 2006 - 2026 The Art Of Relaxation & Divya Yoga Mandali Charitable Trust. All Rights Reserved.`.
+  - Removed obsolete "Transparency" navigation link and hero button.
+  - Removed "Sacred Annadanam" section and all Annadanam copy across server trust profiles, receipt templates, website narrative, and terms modal, replacing with "Meditation & Spiritual Retreats".
+  - Fixed DYMCT entity switching navbar alignment: enforced `flex-wrap: nowrap`, prevented header height expansion from pushing down the donation console, dynamically synchronized `/assets/mark.png` and `/assets/badge.png`, and added scroll margins.
+  - Featured official horizontal brand emblem (`/assets/logo-full.png`) for The Art Of Relaxation in the Hero Showcase card and Sister Trusts Harmony card.
 - [x] **Full Organization Website & Integrated Donation Hub (Option A):**
   - Seamless unified non-profit website on `artofrelaxation.org` featuring:
     * Sticky glassmorphic navbar with smooth-scroll navigation (`#about`, `#teachings`, `#programs`, `#sister-trusts`, `#donate`, `#contact`).
     * Immersive spiritual Hero section with Sanskrit invocations and 3-item spiritual metrics ribbon.
     * In-depth narrative on Sri Vijaya Pratap Maharaj, spiritual philosophy, and the dual-pillar model (Sadhana + Seva).
-    * 3 Pillars of Stillness (Pranayama, Dhyana, Sattvic Living) & 4 Core Seva Initiatives (Annadanam, Retreats, Rural Health, Youth Workshops).
+    * 3 Pillars of Stillness (Pranayama, Dhyana, Sattvic Living) & 3 Core Seva Initiatives (Meditation Retreats, Rural Health Camps, Youth Focus).
     * Sister Trust Lineage presentation with clean trust mission and leadership.
     * Centered dual-rail donation console with trust switcher, PayPal USD/Global, domestic UPI QR standee, UTR submission, and instant receipt modal.
     * Direct dedicated `/donate` routing with automatic smooth-scroll into the contribution console.

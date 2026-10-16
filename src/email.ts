@@ -214,7 +214,7 @@ export function generateSocialShareLinks(
   const encodedText = encodeURIComponent(shareMessage);
   const encodedUrl = encodeURIComponent(cleanUrl);
 
-  const instagramCaption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, wholesome annadanam meals, and rural healthcare: ${cleanUrl} \n\n#Seva #Charity #${cleanTrustTag} #MakeADifference`;
+  const instagramCaption = `I just supported ${trustName}! 🙏 Join me in empowering holistic yoga seva, meditation retreats, and rural healthcare: ${cleanUrl} \n\n#Seva #Charity #${cleanTrustTag} #MakeADifference`;
 
   return {
     whatsapp: `https://api.whatsapp.com/send?text=${encodedText}%20${encodedUrl}`,
@@ -370,7 +370,7 @@ export function renderDonationEmailHtml(data: DonationEmailData): string {
             </div>
             <ul style="margin: 0; padding-left: 20px; color: #78350f; font-size: 13px; line-height: 1.6;">
               <li><strong>Free Daily Yoga & Pranayama:</strong> Sustaining health and meditation programs for seekers.</li>
-              <li><strong>Annadanam Seva:</strong> Distributing fresh, wholesome satvic meals daily to rural communities.</li>
+              <li><strong>Meditation Retreats:</strong> Conducting silent meditation retreats and restorative stress-resilience workshops.</li>
               <li><strong>Rural Health Outreach:</strong> Supporting free Ayurvedic and holistic wellness camps.</li>
               <li><strong>Youth Values Education:</strong> Guiding the next generation in mindfulness and cultural wisdom.</li>
             </ul>

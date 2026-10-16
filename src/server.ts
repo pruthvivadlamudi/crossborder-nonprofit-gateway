@@ -487,9 +487,9 @@ const TRUST_PROFILES: Record<string, any> = {
   divya: {
     id: 'divya',
     name: process.env.PRIMARY_TRUST_NAME || 'Divya Yoga Mandali Charitable Trust',
-    subtitle: 'Vedic Wellness, Yoga Sadhana, Annadanam & Rural Community Upliftment',
-    tagline: 'Empowering communities through holistic yoga, wholesome nutrition, and rural healthcare seva.',
-    mission: 'Dedicated to reviving traditional yoga and holistic wellness, offering free wholesome nutrition (Annadanam), providing free rural healthcare seva, and fostering cultural preservation across communities.',
+    subtitle: 'Vedic Wellness, Yoga Sadhana & Rural Community Upliftment',
+    tagline: 'Empowering communities through holistic yoga, meditative wellness, and rural healthcare seva.',
+    mission: 'Dedicated to reviving traditional yoga and holistic wellness, providing free rural healthcare seva, and fostering cultural preservation across communities.',
     managingTrustee: process.env.MANAGING_TRUSTEE || 'Sri Vijaya Pratap Maharaj',
     merchantEmail: process.env.PRIMARY_MERCHANT_EMAIL || 'trustee@divyayoga.org',
     pan: process.env.PRIMARY_TRUST_PAN || 'AAFTD0000Q',
@@ -508,9 +508,9 @@ const TRUST_PROFILES: Record<string, any> = {
         description: 'Empowering thousands with daily traditional yoga sessions, breathwork, and meditation for chronic illness prevention and inner peace.'
       },
       {
-        icon: '🍲',
-        title: 'Annadanam (Community Nutrition)',
-        description: 'Providing daily fresh, wholesome satvic meals to rural seekers, underprivileged school children, and visiting pilgrims.'
+        icon: '🌸',
+        title: 'Meditation & Spiritual Retreats',
+        description: 'Hosting immersive silent meditation retreats and workshops to help seekers decompress from stress and awaken inner tranquility.'
       },
       {
         icon: '🩺',
@@ -524,8 +524,8 @@ const TRUST_PROFILES: Record<string, any> = {
       }
     ],
     fundUtilization: [
-      { label: 'Yoga Seva & Rural Wellness Camps', percent: 40, color: '#f59e0b' },
-      { label: 'Daily Annadanam & Food Distribution', percent: 35, color: '#10b981' },
+      { label: 'Yoga Seva & Rural Wellness Camps', percent: 45, color: '#f59e0b' },
+      { label: 'Meditation Retreats & Health Outreach', percent: 30, color: '#10b981' },
       { label: 'Youth Guidance & Value Education', percent: 15, color: '#38bdf8' },
       { label: 'Statutory Auditing & Compliance', percent: 10, color: '#c084fc' }
     ]
